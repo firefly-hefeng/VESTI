@@ -1,0 +1,86 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+@source '../../packages/vesti-ui/src/**/*.{ts,tsx}';
+
+/* Vesti Design System - Three-tab dashboard */
+:root {
+  /* Primary Backgrounds */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F7F6F2;
+  --bg-tertiary: #FAF9F5;
+  
+  /* Surface (Cards) */
+  --bg-surface-card: #F0EEE6;
+  --bg-surface-card-hover: #EAE8DF;
+  --bg-surface-card-active: #E3E1D8;
+  --bg-surface-ai-message: #F5F4F0;
+  
+  /* Typography Colors */
+  --text-primary: #1A1A1A;
+  --text-secondary: #6B6B6B;
+  --text-tertiary: #9B9B9B;
+  
+  /* Brand Accent */
+  --accent-primary: #3266AD;
+  --accent-primary-light: rgba(50, 102, 173, 0.08);
+  
+  /* Platform Colors */
+  --platform-chatgpt: #10A37F;
+  --platform-claude: #D97757;
+  --platform-gemini: #4285F4;
+  --platform-deepseek: #1565C0;
+  
+  /* Borders */
+  --border-default: #E5E3DB;
+  --border-subtle: rgba(229, 227, 219, 0.6);
+  
+  /* Shadows */
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04);
+  
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --font-sans: 'Nunito Sans', -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: Georgia, 'Times New Roman', serif;
+  --font-mono: 'Cascadia Mono', 'Courier New', monospace;
+  --font-lora: var(--font-lora);
+  
+  /* Map Vesti colors to Tailwind utilities */
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-bg-surface-card: var(--bg-surface-card);
+  --color-bg-surface-card-hover: var(--bg-surface-card-hover);
+  --color-bg-surface-card-active: var(--bg-surface-card-active);
+  --color-bg-surface-ai-message: var(--bg-surface-ai-message);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-primary-light: var(--accent-primary-light);
+  --color-platform-chatgpt: var(--platform-chatgpt);
+  --color-platform-claude: var(--platform-claude);
+  --color-platform-gemini: var(--platform-gemini);
+  --color-platform-deepseek: var(--platform-deepseek);
+  --color-border-default: var(--border-default);
+  --color-border-subtle: var(--border-subtle);
+  
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply outline-accent-primary/50;
+  }
+  body {
+    @apply bg-bg-tertiary text-text-primary font-sans antialiased;
+  }
+}
