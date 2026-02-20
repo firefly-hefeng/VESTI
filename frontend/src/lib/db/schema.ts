@@ -6,6 +6,7 @@ import type {
   SummaryRecord,
   WeeklyReportRecord,
   Topic,
+  VectorRecord,
 } from "../types";
 
 export type ConversationRecord = Omit<Conversation, "id"> & { id?: number };
@@ -13,6 +14,7 @@ export type MessageRecord = Omit<Message, "id"> & { id?: number };
 export type SummaryRecordRecord = Omit<SummaryRecord, "id"> & { id?: number };
 export type WeeklyReportRecordRecord = Omit<WeeklyReportRecord, "id"> & { id?: number };
 export type TopicRecord = Omit<Topic, "id" | "children" | "count"> & { id?: number };
+export type VectorRecordRecord = Omit<VectorRecord, "id"> & { id?: number };
 
 export class MemoryHubDB extends Dexie {
   conversations!: Table<ConversationRecord, number>;
@@ -20,6 +22,7 @@ export class MemoryHubDB extends Dexie {
   summaries!: Table<SummaryRecordRecord, number>;
   weekly_reports!: Table<WeeklyReportRecordRecord, number>;
   topics!: Table<TopicRecord, number>;
+  vectors!: Table<VectorRecordRecord, number>;
 
   constructor() {
     super("MemoryHubDB");
@@ -184,6 +187,20 @@ export class MemoryHubDB extends Dexie {
             record.turn_count = typeof aiTurns === "number" ? aiTurns : fallbackTurnCount;
           });
       });
+    this.version(6)
+      .stores({
+        conversations:
+          "++id, platform, title, created_at, updated_at, uuid, source_created_at, turn_count, topic_id, is_starred, [platform+created_at], [platform+uuid], [topic_id+updated_at]",
+        messages:
+          "++id, conversation_id, role, created_at, [conversation_id+created_at]",
+        summaries: "++id, conversationId, createdAt",
+        weekly_reports: "++id, rangeStart, rangeEnd, createdAt",
+        topics:
+          "++id, parent_id, name, created_at, updated_at, [parent_id+name]",
+        vectors:
+          "++id, conversation_id, text_hash, [conversation_id+text_hash]",
+      })
+      .upgrade(() => undefined);
   }
 }
 

@@ -7,6 +7,7 @@ import type {
   LlmConfig,
   Message,
   Platform,
+  RelatedConversation,
   StorageUsageSnapshot,
   SummaryRecord,
   WeeklyReportRecord,
@@ -14,6 +15,7 @@ import type {
   GardenerResult,
 } from "../types";
 import { sendRequest } from "../messaging/runtime";
+import type { ConversationUpdateChanges } from "../messaging/protocol";
 
 const LONG_RUNNING_TIMEOUT_MS = 120000;
 const TEST_CONNECTION_TIMEOUT_MS = 30000;
@@ -70,6 +72,17 @@ export async function updateConversationTopic(
   return result.conversation;
 }
 
+export async function updateConversation(
+  id: number,
+  changes: ConversationUpdateChanges
+): Promise<{ updated: boolean; conversation: Conversation }> {
+  return sendRequest({
+    type: "UPDATE_CONVERSATION",
+    target: "offscreen",
+    payload: { id, changes },
+  }) as Promise<{ updated: boolean; conversation: Conversation }>;
+}
+
 export async function runGardener(
   conversationId: number
 ): Promise<{ updated: boolean; conversation: Conversation; result: GardenerResult }> {
@@ -86,6 +99,17 @@ export async function runGardener(
   }
 
   return result;
+}
+
+export async function getRelatedConversations(
+  conversationId: number,
+  limit?: number
+): Promise<RelatedConversation[]> {
+  return sendRequest({
+    type: "GET_RELATED_CONVERSATIONS",
+    target: "offscreen",
+    payload: { conversationId, limit },
+  }, LONG_RUNNING_TIMEOUT_MS) as Promise<RelatedConversation[]>;
 }
 
 export async function getMessages(

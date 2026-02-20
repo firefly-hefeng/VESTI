@@ -7,6 +7,7 @@ import {
   getTopics,
   createTopic,
   updateConversationTopic,
+  updateConversation,
   listMessages,
   deleteConversation,
   updateConversationTitle,
@@ -18,6 +19,7 @@ import {
   getWeeklyReport,
 } from "../lib/db/repository";
 import { runGardener } from "../lib/services/gardenerService";
+import { findRelatedConversations } from "../lib/services/searchService";
 import { getLlmSettings, setLlmSettings } from "../lib/services/llmSettingsService";
 import { callInference } from "../lib/services/llmService";
 import {
@@ -73,8 +75,22 @@ async function handleRequest(message: RequestMessage): Promise<ResponseMessage> 
         );
         return { ok: true, type: messageType, data: { updated: true, conversation } };
       }
+      case "UPDATE_CONVERSATION": {
+        const data = await updateConversation(
+          message.payload.id,
+          message.payload.changes
+        );
+        return { ok: true, type: messageType, data };
+      }
       case "RUN_GARDENER": {
         const data = await runGardener(message.payload.conversationId);
+        return { ok: true, type: messageType, data };
+      }
+      case "GET_RELATED_CONVERSATIONS": {
+        const data = await findRelatedConversations(
+          message.payload.conversationId,
+          message.payload.limit
+        );
         return { ok: true, type: messageType, data };
       }
       case "GET_MESSAGES": {

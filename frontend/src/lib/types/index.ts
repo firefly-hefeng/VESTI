@@ -53,6 +53,20 @@ export interface Conversation {
   is_starred: boolean;
 }
 
+export interface VectorRecord {
+  id: number;
+  conversation_id: number;
+  text_hash: string;
+  embedding: Float32Array;
+}
+
+export interface RelatedConversation {
+  id: number;
+  title: string;
+  platform: Platform;
+  similarity: number;
+}
+
 export interface Message {
   id: number;
   conversation_id: number;

@@ -14,6 +14,7 @@ import type {
   StorageUsageSnapshot,
   SummaryRecord,
   WeeklyReportRecord,
+  RelatedConversation,
 } from "../types";
 
 export interface DateRange {
@@ -25,6 +26,11 @@ export interface ConversationFilters {
   platform?: Platform;
   search?: string;
   dateRange?: DateRange;
+}
+
+export interface ConversationUpdateChanges {
+  topic_id?: number | null;
+  is_starred?: boolean;
 }
 
 export interface ConversationDraft {
@@ -92,11 +98,25 @@ export type RequestMessage =
       payload: { id: number; topic_id: number | null };
     }
   | {
+      type: "UPDATE_CONVERSATION";
+      target?: "offscreen";
+      via?: "background";
+      requestId?: string;
+      payload: { id: number; changes: ConversationUpdateChanges };
+    }
+  | {
       type: "RUN_GARDENER";
       target?: "offscreen";
       via?: "background";
       requestId?: string;
       payload: { conversationId: number };
+    }
+  | {
+      type: "GET_RELATED_CONVERSATIONS";
+      target?: "offscreen";
+      via?: "background";
+      requestId?: string;
+      payload: { conversationId: number; limit?: number };
     }
   | {
       type: "GET_MESSAGES";
@@ -200,6 +220,11 @@ export type RequestMessage =
       type: "FORCE_ARCHIVE_TRANSIENT";
       target?: "background";
       requestId?: string;
+    }
+  | {
+      type: "RUN_VECTORIZATION";
+      target?: "background";
+      requestId?: string;
     };
 
 export type ResponseDataMap = {
@@ -213,7 +238,9 @@ export type ResponseDataMap = {
   GET_TOPICS: Topic[];
   CREATE_TOPIC: { topic: Topic };
   UPDATE_CONVERSATION_TOPIC: { updated: boolean; conversation: Conversation };
+  UPDATE_CONVERSATION: { updated: boolean; conversation: Conversation };
   RUN_GARDENER: { updated: boolean; conversation: Conversation; result: GardenerResult };
+  GET_RELATED_CONVERSATIONS: RelatedConversation[];
   GET_MESSAGES: Message[];
   DELETE_CONVERSATION: { deleted: boolean };
   UPDATE_CONVERSATION_TITLE: { updated: boolean; conversation: Conversation };
@@ -230,6 +257,7 @@ export type ResponseDataMap = {
   GENERATE_WEEKLY_REPORT: WeeklyReportRecord;
   GET_ACTIVE_CAPTURE_STATUS: ActiveCaptureStatus;
   FORCE_ARCHIVE_TRANSIENT: ForceArchiveTransientResult;
+  RUN_VECTORIZATION: { queued: boolean };
 };
 
 export type ResponseMessage<T extends keyof ResponseDataMap = keyof ResponseDataMap> =

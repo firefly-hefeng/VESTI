@@ -1,6 +1,8 @@
 import { deduplicateAndSave } from "../core/middleware/deduplicate";
 import type { ConversationDraft, ParsedMessage } from "../messaging/protocol";
 import { getCaptureSettings } from "../services/captureSettingsService";
+import { runGardener } from "../services/gardenerService";
+import { requestVectorization } from "../services/vectorizationService";
 import { countAiTurns } from "./turn-metrics";
 import type {
   CaptureDecisionMeta,
@@ -201,6 +203,24 @@ export async function interceptAndPersistCapture(
       payload.conversation,
       payload.messages
     );
+    if (persisted.saved && typeof persisted.conversationId === "number") {
+      requestVectorization();
+      void (async () => {
+        try {
+          const result = await runGardener(persisted.conversationId);
+          if (result.updated && chrome?.runtime?.sendMessage) {
+            chrome.runtime.sendMessage({ type: "VESTI_DATA_UPDATED" }, () => {
+              void chrome.runtime.lastError;
+            });
+          }
+        } catch (error) {
+          logger.warn("capture", "Auto Gardener failed", {
+            conversationId: persisted.conversationId,
+            error: (error as Error)?.message ?? String(error),
+          });
+        }
+      })();
+    }
     return {
       ...persisted,
       decision,

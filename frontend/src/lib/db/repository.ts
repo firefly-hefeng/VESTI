@@ -332,6 +332,53 @@ export async function updateConversationTopic(
   });
 }
 
+export async function updateConversation(
+  id: number,
+  changes: { topic_id?: number | null; is_starred?: boolean }
+): Promise<{ updated: boolean; conversation: Conversation }> {
+  const existing = await db.conversations.get(id);
+  if (!existing) {
+    throw new Error("CONVERSATION_NOT_FOUND");
+  }
+  if (existing.id === undefined) {
+    throw new Error("Conversation record missing id");
+  }
+
+  const updates: Partial<ConversationRecord> = {};
+  let updated = false;
+
+  if (changes.topic_id !== undefined && changes.topic_id !== existing.topic_id) {
+    if (changes.topic_id !== null) {
+      const topic = await db.topics.get(changes.topic_id);
+      if (!topic) {
+        throw new Error("TOPIC_NOT_FOUND");
+      }
+    }
+    updates.topic_id = changes.topic_id ?? null;
+    updated = true;
+  }
+
+  if (
+    changes.is_starred !== undefined &&
+    changes.is_starred !== existing.is_starred
+  ) {
+    updates.is_starred = changes.is_starred;
+    updated = true;
+  }
+
+  if (!updated) {
+    return { updated: false, conversation: toConversation(existing) };
+  }
+
+  updates.updated_at = Date.now();
+  await db.conversations.update(existing.id, updates);
+
+  return {
+    updated: true,
+    conversation: toConversation({ ...existing, ...updates, id: existing.id }),
+  };
+}
+
 export async function listConversationsByRange(
   rangeStart: number,
   rangeEnd: number
@@ -446,12 +493,14 @@ export async function clearAllData(): Promise<boolean> {
     db.summaries,
     db.weekly_reports,
     db.topics,
+    db.vectors,
     async () => {
       await db.messages.clear();
       await db.conversations.clear();
       await db.summaries.clear();
       await db.weekly_reports.clear();
       await db.topics.clear();
+      await db.vectors.clear();
     }
   );
   return true;

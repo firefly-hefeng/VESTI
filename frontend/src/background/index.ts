@@ -7,6 +7,7 @@ import {
   getTopics,
   createTopic,
   updateConversationTopic,
+  updateConversation,
   listMessages,
   deleteConversation,
   updateConversationTitle,
@@ -18,6 +19,10 @@ import {
   getWeeklyReport,
 } from "../lib/db/repository";
 import { runGardener } from "../lib/services/gardenerService";
+import {
+  findRelatedConversations,
+  vectorizeAllConversations,
+} from "../lib/services/searchService";
 import { getLlmSettings, setLlmSettings } from "../lib/services/llmSettingsService";
 import { callInference } from "../lib/services/llmService";
 import {
@@ -34,6 +39,36 @@ import type {
 } from "../lib/types";
 import { logger } from "../lib/utils/logger";
 import { getLlmAccessMode, normalizeLlmSettings } from "../lib/services/llmConfig";
+
+let isVectorizing = false;
+let rerunVectorizationRequested = false;
+
+async function runVectorizationTask(reason: string): Promise<boolean> {
+  if (isVectorizing) {
+    rerunVectorizationRequested = true;
+    return false;
+  }
+  isVectorizing = true;
+  try {
+    const created = await vectorizeAllConversations();
+    logger.info("vectorize", "Vectorization task completed", {
+      reason,
+      created,
+    });
+  } catch (error) {
+    logger.warn("vectorize", "Vectorization task failed", {
+      reason,
+      error: (error as Error)?.message ?? String(error),
+    });
+  } finally {
+    isVectorizing = false;
+    if (rerunVectorizationRequested) {
+      rerunVectorizationRequested = false;
+      void runVectorizationTask("rerun");
+    }
+  }
+  return true;
+}
 
 function requireSettings(settings: LlmConfig | null): LlmConfig {
   if (!settings) {
@@ -275,6 +310,10 @@ async function handleBackgroundRequest(
 
         return { ok: true, type: messageType, data };
       }
+      case "RUN_VECTORIZATION": {
+        void runVectorizationTask("message");
+        return { ok: true, type: messageType, data: { queued: true } };
+      }
       default:
         return {
           ok: false,
@@ -319,8 +358,22 @@ async function handleOffscreenRequest(message: RequestMessage): Promise<Response
         );
         return { ok: true, type: messageType, data: { updated: true, conversation } };
       }
+      case "UPDATE_CONVERSATION": {
+        const data = await updateConversation(
+          message.payload.id,
+          message.payload.changes
+        );
+        return { ok: true, type: messageType, data };
+      }
       case "RUN_GARDENER": {
         const data = await runGardener(message.payload.conversationId);
+        return { ok: true, type: messageType, data };
+      }
+      case "GET_RELATED_CONVERSATIONS": {
+        const data = await findRelatedConversations(
+          message.payload.conversationId,
+          message.payload.limit
+        );
         return { ok: true, type: messageType, data };
       }
       case "GET_MESSAGES": {
@@ -414,6 +467,15 @@ async function handleOffscreenRequest(message: RequestMessage): Promise<Response
       error: (error as Error).message || "Unknown error",
     };
   }
+}
+
+if (chrome?.alarms?.create) {
+  chrome.alarms.create("vectorize-job", { periodInMinutes: 5 });
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "vectorize-job") {
+      void runVectorizationTask("alarm");
+    }
+  });
 }
 
 function openSidepanelForTab(tabId: number): void {

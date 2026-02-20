@@ -1,5 +1,6 @@
 import type { LlmConfig } from "../types";
 import { getProxyRouteUrl } from "./llmConfig";
+import { getLlmSettings } from "./llmSettingsService";
 
 const DEFAULT_EMBEDDING_MODEL = "text-embedding-v2";
 const DASHSCOPE_EMBEDDINGS_URL =
@@ -214,10 +215,7 @@ export async function requestEmbeddings(
         options
       );
     } catch (error) {
-      if (
-        fallbackToProxyOnDirectAuthError &&
-        shouldFallbackToProxy(error)
-      ) {
+      if (fallbackToProxyOnDirectAuthError && shouldFallbackToProxy(error)) {
         return requestEmbeddingsFromRoute(
           config,
           "proxy",
@@ -230,4 +228,49 @@ export async function requestEmbeddings(
   }
 
   return requestEmbeddingsFromRoute(config, "proxy", normalizedInput, options);
+}
+
+async function requireLlmSettings(): Promise<LlmConfig> {
+  const settings = await getLlmSettings();
+  if (!settings) {
+    throw createEmbeddingError(
+      "EMBEDDING_CONFIG_MISSING",
+      "Missing LLM settings for embeddings."
+    );
+  }
+  return settings;
+}
+
+export async function fetchEmbeddings(
+  input: string | string[],
+  options: EmbeddingRequestOptions = {}
+): Promise<Float32Array[]> {
+  const config = await requireLlmSettings();
+  const normalizedInput = normalizeInput(input);
+  if (normalizedInput.length === 0) {
+    throw createEmbeddingError(
+      "EMBEDDING_INPUT_EMPTY",
+      "Embedding input cannot be empty."
+    );
+  }
+
+  const result = await requestEmbeddingsFromRoute(
+    config,
+    "proxy",
+    normalizedInput,
+    options
+  );
+
+  return result.vectors.map((vector) => new Float32Array(vector));
+}
+
+export async function embedText(text: string): Promise<Float32Array> {
+  const vectors = await fetchEmbeddings(text);
+  if (vectors.length === 0) {
+    throw createEmbeddingError(
+      "EMBEDDING_EMPTY_RESULT",
+      "Embedding response contains no vectors."
+    );
+  }
+  return vectors[0];
 }
