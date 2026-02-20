@@ -3,6 +3,8 @@
   useEffect,
   useRef,
   useState,
+  type ChangeEvent,
+  type CSSProperties,
   type MouseEvent,
   type ReactNode,
 } from "react";
@@ -16,6 +18,7 @@ import {
 } from "lucide-react";
 import { resolveTurnCount } from "~lib/capture/turn-metrics";
 import type { Conversation } from "~lib/types";
+import { updateConversationAndSync } from "~lib/services/syncActions";
 import { PlatformTag } from "./PlatformTag";
 
 const TOOLTIP_DELAY_MS = 200;
@@ -120,6 +123,8 @@ interface ConversationCardProps {
   onOpenSource?: (conversation: Conversation) => void;
   onDelete?: (id: number) => Promise<void> | void;
   onRenameTitle?: (id: number, title: string) => Promise<boolean>;
+  topicOptions?: { id: number; label: string }[];
+  onConversationUpdated?: (conversation: Conversation) => void;
 }
 
 export function ConversationCard({
@@ -129,6 +134,8 @@ export function ConversationCard({
   onOpenSource,
   onDelete,
   onRenameTitle,
+  topicOptions = [],
+  onConversationUpdated,
 }: ConversationCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -144,6 +151,28 @@ export function ConversationCard({
     conversation.turn_count,
     conversation.message_count
   );
+  const starLabel = conversation.is_starred ? "Unstar" : "Star";
+  const selectedTopicValue =
+    conversation.topic_id === null ? "" : String(conversation.topic_id);
+
+  const buttonStyle: CSSProperties = {
+    fontSize: 11,
+    padding: "2px 6px",
+    borderRadius: 4,
+    border: "1px solid hsl(var(--border-subtle))",
+    background: "transparent",
+    color: "hsl(var(--text-secondary))",
+    cursor: "pointer",
+  };
+
+  const selectStyle: CSSProperties = {
+    fontSize: 11,
+    padding: "2px 6px",
+    borderRadius: 4,
+    border: "1px solid hsl(var(--border-subtle))",
+    background: "transparent",
+    color: "hsl(var(--text-secondary))",
+  };
 
   useEffect(() => {
     return () => {
@@ -258,6 +287,33 @@ export function ConversationCard({
     if (isSavingTitle) return;
     setDraftTitle(conversation.title);
     setIsEditingTitle(true);
+  };
+
+  const handleToggleStar = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    try {
+      const updated = await updateConversationAndSync(conversation.id, {
+        is_starred: !conversation.is_starred,
+      });
+      onConversationUpdated?.(updated);
+    } catch (error) {
+      console.error("Failed to update star status", error);
+    }
+  };
+
+  const handleTopicChange = async (event: ChangeEvent<HTMLSelectElement>) => {
+    event.stopPropagation();
+    const value = event.target.value;
+    const nextTopicId = value ? Number(value) : null;
+
+    try {
+      const updated = await updateConversationAndSync(conversation.id, {
+        topic_id: Number.isNaN(nextTopicId) ? null : nextTopicId,
+      });
+      onConversationUpdated?.(updated);
+    } catch (error) {
+      console.error("Failed to update topic assignment", error);
+    }
   };
 
   return (
@@ -388,9 +444,33 @@ export function ConversationCard({
               />
             </div>
           </div>
+
+          {/* TODO FOR UPSTREAM: Temporary UI for ext-web sync testing on branch ui-v1.4-a. Safe to override visually, but MUST keep calling updateConversationAndSync(). */}
+          <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={handleToggleStar}
+              aria-pressed={conversation.is_starred}
+              style={buttonStyle}
+            >
+              {starLabel}
+            </button>
+            <select
+              aria-label="Assign topic"
+              value={selectedTopicValue}
+              onChange={handleTopicChange}
+              style={selectStyle}
+            >
+              <option value="">No topic</option>
+              {topicOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Conversation, Message } from "~lib/types";
+import type { Conversation, Message, Topic } from "~lib/types";
 import {
   deleteConversation,
   getConversations,
   getMessages,
+  getTopics,
   updateConversationTitle,
 } from "~lib/services/storageService";
 import { trackCardActionClick } from "~lib/services/telemetry";
@@ -65,12 +66,33 @@ function matchesSearch(conversation: Conversation, normalizedQuery: string): boo
   );
 }
 
+interface TopicOption {
+  id: number;
+  label: string;
+}
+
+function flattenTopics(
+  topics: Topic[],
+  level: number = 0,
+  acc: TopicOption[] = []
+): TopicOption[] {
+  for (const topic of topics) {
+    const prefix = level > 0 ? `${"- ".repeat(level)}` : "";
+    acc.push({ id: topic.id, label: `${prefix}${topic.name}` });
+    if (topic.children && topic.children.length > 0) {
+      flattenTopics(topic.children, level + 1, acc);
+    }
+  }
+  return acc;
+}
+
 export function ConversationList({
   searchQuery,
   onSelect,
   refreshToken,
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const fullTextCacheRef = useRef<Map<number, string>>(new Map());
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -95,6 +117,26 @@ export function ConversationList({
       cancelled = true;
     };
   }, [searchQuery, refreshToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getTopics()
+      .then((data) => {
+        if (!cancelled) {
+          setTopics(data);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTopics([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshToken]);
+
+  const topicOptions = useMemo(() => flattenTopics(topics), [topics]);
 
   const grouped = useMemo(() => {
     const now = Date.now();
@@ -219,6 +261,27 @@ export function ConversationList({
     [conversations, normalizedSearchQuery]
   );
 
+  const handleConversationUpdated = useCallback(
+    (updatedConversation: Conversation) => {
+      setConversations((prev) => {
+        let next = prev.map((item) =>
+          item.id === updatedConversation.id
+            ? { ...item, ...updatedConversation }
+            : item
+        );
+
+        next = next.sort((a, b) => b.updated_at - a.updated_at);
+
+        if (!normalizedSearchQuery) {
+          return next;
+        }
+
+        return next.filter((item) => matchesSearch(item, normalizedSearchQuery));
+      });
+    },
+    [normalizedSearchQuery]
+  );
+
   if (loading) {
     return (
       <div className="flex flex-col gap-2.5 p-4">
@@ -259,6 +322,8 @@ export function ConversationList({
                 onOpenSource={handleOpenSource}
                 onDelete={handleDeleteConversation}
                 onRenameTitle={handleRenameTitle}
+                topicOptions={topicOptions}
+                onConversationUpdated={handleConversationUpdated}
               />
             ))}
           </div>

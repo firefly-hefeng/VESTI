@@ -118,42 +118,234 @@
 }
 
 @layer base {
-  .dark {
-    --bg-primary: 0 0% 11%;
-    --bg-secondary: 0 0% 16%;
-    --bg-tertiary: 0 0% 10%;
-    --bg-sidebar: 0 0% 7%;
-
-    --surface-card: 0 0% 13%;
-    --surface-card-hover: 0 0% 17%;
-    --surface-card-active: 0 0% 21%;
-    --surface-ai-message: 0 0% 14%;
-
-    --text-primary: 0 0% 96%;
-    --text-secondary: 0 0% 78%;
-    --text-tertiary: 0 0% 62%;
-    --text-inverse: 0 0% 10%;
-
-    --accent-primary: 0 0% 96%;
-    --accent-primary-hover: 0 0% 100%;
-    --accent-primary-active: 0 0% 84%;
-    --accent-primary-light: 0 0% 100% / 0.08;
-    --accent-primary-muted: 0 0% 100% / 0.16;
-
-    --border-default: 0 0% 25%;
-    --border-subtle: 0 0% 20%;
-    --border-focus: 0 0% 84%;
-
-    --success: 145 55% 46%;
-    --warning: 40 85% 58%;
-    --danger: 0 72% 60%;
-
-    --capsule-bg: 0 0% 12% / 0.94;
-
-    --shadow-color: 0, 0, 0;
-    --shadow-paper: 0 8px 24px rgba(var(--shadow-color), 0.33), 0 3px 8px rgba(var(--shadow-color), 0.24);
-    --shadow-card-hover: 0 10px 28px rgba(var(--shadow-color), 0.35), 0 3px 9px rgba(var(--shadow-color), 0.25);
-    --shadow-popover: 0 12px 30px rgba(var(--shadow-color), 0.4), 0 4px 10px rgba(var(--shadow-color), 0.3);
-    --shadow-capsule: 0 8px 20px rgba(var(--shadow-color), 0.45), 0 3px 8px rgba(var(--shadow-color), 0.3);
+  * {
+    @apply border-border;
   }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+@layer utilities {
+  .vesti-options {
+    --bg-primary: 0 0% 100%;
+    --bg-secondary: 48 24% 96%;
+    --bg-tertiary: 48 33% 97%;
+    --bg-sidebar: 48 24% 96%;
+
+    --surface-card: 48 25% 92%;
+    --surface-card-hover: 49 21% 90%;
+    --surface-card-active: 49 16% 87%;
+    --surface-ai-message: 48 20% 95%;
+
+    --text-primary: 0 0% 10%;
+    --text-secondary: 0 0% 42%;
+    --text-tertiary: 0 0% 61%;
+    --text-inverse: 0 0% 100%;
+
+    --accent-primary: 215 55% 44%;
+    --accent-primary-hover: 215 55% 40%;
+    --accent-primary-active: 215 55% 36%;
+    --accent-primary-light: 215 55% 44% / 0.08;
+    --accent-primary-muted: 215 55% 44% / 0.15;
+
+    --border-default: 48 16% 88%;
+    --border-subtle: 47 21% 92%;
+    --border-focus: 215 55% 44%;
+
+    --success: 141 51% 36%;
+    --warning: 37 91% 44%;
+    --danger: 0 57% 51%;
+
+    --chatgpt-bg: 125 39% 94%;
+    --chatgpt-text: 123 46% 34%;
+    --chatgpt-border: 122 37% 84%;
+    --claude-bg: 37 100% 94%;
+    --claude-text: 25 80% 42%;
+    --claude-border: 36 100% 85%;
+    --gemini-bg: 231 44% 94%;
+    --gemini-text: 232 50% 45%;
+    --gemini-border: 232 45% 84%;
+    --deepseek-bg: 205 87% 94%;
+    --deepseek-text: 212 80% 42%;
+    --deepseek-border: 207 89% 86%;
+
+    --font-ui: "Nunito Sans", -apple-system, "Segoe UI", sans-serif;
+    --font-serif: Georgia, "Times New Roman", serif;
+    --font-mono: "Cascadia Mono", "Courier New", monospace;
+    --font-brand: "Lora", Georgia, "Times New Roman", serif;
+    --font-lora: "Lora", Georgia, "Times New Roman", serif;
+    font-family: var(--font-ui);
+  }
+
+  .vesti-shell {
+    font-family: var(--font-ui);
+  }
+
+  .vesti-artifact {
+    font-family: var(--font-serif);
+    font-optical-sizing: auto;
+    font-variant-ligatures: common-ligatures;
+  }
+
+  .vesti-page-title {
+    font-family: var(--font-vesti-serif);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  .vesti-brand-wordmark {
+    font-family: var(--font-brand);
+    font-weight: 600;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-reading-md {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  .text-reading-lg {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    line-height: 1.65;
+  }
+
+  .card-shadow-warm {
+    box-shadow: var(--shadow-paper);
+  }
+
+  .tag-paper {
+    border: 1px solid hsl(var(--border-subtle));
+    background-color: rgba(255, 255, 255, 0.6);
+  }
+
+  .settings-input {
+    width: 100%;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid #e6e2d6;
+    background-color: #ffffff;
+    padding: 0 12px;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    color: #1a1918;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .settings-input:focus-visible {
+    outline: none;
+    border-color: #1a1918;
+    box-shadow: 0 0 0 2px rgba(26, 25, 24, 0.1);
+  }
+
+  .settings-switch {
+    --switch-x: 0px;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    width: 44px;
+    flex-shrink: 0;
+    line-height: 1;
+    cursor: pointer;
+    overflow: hidden;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-color: #d1d1d1;
+    transition: background-color 0.2s ease-in-out;
+  }
+
+  .settings-switch[data-state="checked"] {
+    --switch-x: 20px;
+    background-color: #1a1918;
+  }
+
+  .settings-switch-thumb {
+    pointer-events: none;
+    position: absolute;
+    left: 2px;
+    top: 50%;
+    display: inline-block;
+    height: 20px;
+    width: 20px;
+    border-radius: 9999px;
+    background-color: #ffffff;
+    box-shadow: 0 1px 2px rgba(26, 25, 24, 0.2);
+    transform: translate3d(var(--switch-x), -50%, 0);
+    transition: transform 0.2s ease-in-out;
+  }
+}
+
+@keyframes breathing {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-breathing {
+  animation: breathing 2.5s ease-in-out infinite;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.vesti-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.vesti-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.vesti-scroll::-webkit-scrollbar-thumb {
+  background: hsl(var(--border-default));
+  border-radius: 9999px;
+}
+
+.vesti-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--text-tertiary));
+}
+
+.heatmap-l1 {
+  background-color: hsl(var(--heatmap-1, 80 62% 72%));
+}
+
+.heatmap-l2 {
+  background-color: hsl(var(--heatmap-2, 112 45% 61%));
+}
+
+.heatmap-l3 {
+  background-color: hsl(var(--heatmap-3, 120 40% 44%));
+}
+
+.heatmap-l4 {
+  background-color: hsl(var(--heatmap-4, 120 40% 30%));
 }
