@@ -2,7 +2,7 @@
 
 const config: Config = {
   darkMode: ["class"],
-  content: ["./src/**/*.{ts,tsx}", "../../packages/vesti-ui/src/**/*.{ts,tsx}"],
+  content: ["./src/**/*.{ts,tsx}", "../packages/vesti-ui/src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {

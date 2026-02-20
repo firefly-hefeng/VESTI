@@ -11,7 +11,7 @@
     "eval:prompts": "pnpm exec tsc --project ../scripts/tsconfig.eval.json && node ../.tmp/eval/scripts/eval-prompts.js"
   },
   "dependencies": {
-    "@vesti/ui": "file:../../packages/vesti-ui",
+    "@vesti/ui": "file:../packages/vesti-ui",
     "dexie": "^4.3.0",
     "lucide-react": "^0.544.0",
     "plasmo": "0.90.5",

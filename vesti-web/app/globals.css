@@ -3,7 +3,7 @@
 @import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
-@source '../../packages/vesti-ui/src/**/*.{ts,tsx}';
+@source '../packages/vesti-ui/src/**/*.{ts,tsx}';
 
 /* Vesti Design System - Three-tab dashboard */
 :root {
