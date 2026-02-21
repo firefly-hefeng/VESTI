@@ -33,6 +33,7 @@ Tier C (reusable units)
 
 Reference:
 - `documents/ui_refactor/v1_4_information_architecture_contract.md`
+- `documents/ui_refactor/v1_4_settings_information_density_contract.md`
 
 ---
 
@@ -90,6 +91,13 @@ Center action states must define:
 4. Destructive actions must keep confirm guard.
 5. Copy/open/external actions must keep telemetry hooks where already present.
 6. Center logo interaction must stay single-purpose in v1.4 (manual archive only).
+7. Settings grouping contract:
+   - `DisclosureSection` is used for `Appearance` + `System` sections.
+   - `Support` uses dedicated flat link rows (no disclosure shell).
+   - `Language` uses disabled-soon row semantics (non-expandable, no chevron).
+8. Send Feedback contract:
+   - inline reveal block is row-triggered disclosure, not switch/toggle behavior.
+   - reveal content includes email, copy action, and GitHub issue shortcut.
 
 ---
 
@@ -119,6 +127,7 @@ Minimum requirements:
 - Multi-line truncation rules must be deterministic (`line-clamp-*` where applicable).
 - Metadata rows should not wrap into ambiguous layouts for long titles.
 - Center action affordance must remain discoverable in compact height.
+- Settings body text density must remain minimal; long explanatory paragraphs move to README.
 
 ---
 

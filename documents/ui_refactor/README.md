@@ -7,6 +7,8 @@ Owner: Frontend + UI Design + QA
 
 - `v1_4_information_architecture_contract.md`
   - v1.4 信息架构总契约（四分区边界、中心动作、命名与路由策略）
+- `v1_4_settings_information_density_contract.md`
+  - v1.4 Settings 信息密度契约（三分组、Support 平铺、说明文案分级）
 - `v1_4_ui_refactor_engineering_spec.md`
   - v1.4 主规格（范围、架构、信息结构、实施里程碑）
 - `v1_4_ui_refactor_component_system_spec.md`
@@ -23,4 +25,5 @@ Owner: Frontend + UI Design + QA
 - v1.5 is reserved for floating capsule upgrade (`documents/floating_capsule/*`).
 - Cross-version dependencies must reference `documents/capture_engine/*`.
 - IA decisions in v1.4 must use `v1_4_information_architecture_contract.md` as source of truth.
+- Settings density/support semantics in v1.4 must use `v1_4_settings_information_density_contract.md` as source of truth.
 - Extension sans fonts are local-only (`frontend/public/fonts/*`), built via `scripts/build-ui-fonts.ps1`.

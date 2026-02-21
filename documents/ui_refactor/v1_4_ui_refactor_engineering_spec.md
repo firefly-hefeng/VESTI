@@ -23,6 +23,7 @@ Locked constraints:
 
 IA source of truth:
 - `documents/ui_refactor/v1_4_information_architecture_contract.md`
+- `documents/ui_refactor/v1_4_settings_information_density_contract.md`
 
 ---
 
@@ -102,6 +103,13 @@ Each level must map to explicit design tokens (background, border, shadow, text 
 - Secondary actions: grouped and visually subordinate.
 - Destructive actions: isolated with explicit confirmation guard.
 
+## 4.6 Settings density and grouping
+- Settings is grouped into `Personalisation`, `System`, and `Support`.
+- `Appearance` and system controls remain disclosure-based.
+- `Language` is a disabled-soon non-expandable row (no chevron affordance).
+- `Support` is a flat-row block (`Docs & Help`, `Send Feedback`, `What's New`) rather than accordion.
+- `Send Feedback` uses inline reveal (email + copy + issue link), not toggle semantics.
+
 ---
 
 ## 5. Component Scope
@@ -136,6 +144,10 @@ Requirements:
    - Full-text body scan triggers only when query length is `>=2`.
    - Result ordering remains `updated_at` descending.
    - If matched only in message body, show subtle hint `Matched in messages`.
+8. Settings copy density contract:
+   - Keep only instruction/status/warning copy in accordion body.
+   - Move long-form explanation text to README.
+   - Do not add second-level explanation toggles.
 
 ---
 
@@ -157,6 +169,7 @@ Requirements:
 - standardize Insights header (including KB entry)
 - normalize Data dashboard composition and compaction audit surface
 - align Settings structure (meta controls + external links section)
+- freeze Settings grouping and support interaction semantics per settings density contract
 
 ### Phase 4 (P1): hardening and polish
 - visual regression sweep
