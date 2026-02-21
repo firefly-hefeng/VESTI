@@ -23,6 +23,7 @@ export function VestiDashboard({
   logoAlt = "Vesti",
   rootClassName,
 }: DashboardProps) {
+  const SETTINGS_KEY = "vesti_llm_settings";
   const [activeTab, setActiveTab] = useState<Tab>("library");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [modelscopeKey, setModelscopeKey] = useState("");
@@ -40,9 +41,10 @@ export function VestiDashboard({
       setSettingsAvailable(false);
       return;
     }
-    chrome.storage.local.get("modelscope_key", (result) => {
+    chrome.storage.local.get(SETTINGS_KEY, (result) => {
       setSettingsAvailable(true);
-      setModelscopeKey((result?.modelscope_key as string | undefined) ?? "");
+      const settings = result?.[SETTINGS_KEY] as { apiKey?: string } | undefined;
+      setModelscopeKey(settings?.apiKey ?? "");
     });
   }, [settingsOpen]);
 
@@ -52,14 +54,26 @@ export function VestiDashboard({
       setSettingsStatus("error");
       return;
     }
-    chrome.storage.local.set({ modelscope_key: modelscopeKey.trim() }, () => {
+    chrome.storage.local.get(SETTINGS_KEY, (result) => {
       const err = chrome.runtime?.lastError;
       if (err) {
         setSettingsStatus("error");
         return;
       }
-      setSettingsStatus("saved");
-      setTimeout(() => setSettingsStatus("idle"), 1500);
+      const existing = (result?.[SETTINGS_KEY] as Record<string, unknown>) ?? {};
+      const next = {
+        ...existing,
+        apiKey: modelscopeKey.trim(),
+      };
+      chrome.storage.local.set({ [SETTINGS_KEY]: next }, () => {
+        const saveErr = chrome.runtime?.lastError;
+        if (saveErr) {
+          setSettingsStatus("error");
+          return;
+        }
+        setSettingsStatus("saved");
+        setTimeout(() => setSettingsStatus("idle"), 1500);
+      });
     });
   };
 
