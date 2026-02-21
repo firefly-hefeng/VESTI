@@ -190,6 +190,13 @@ Host permissions（`frontend/package.json`）：
 - `insights`：摘要/周报展示与生成。
 - `settings`：模型配置 + capture engine + 手动归档。
 - `data`：存储、导出、清理。
+- Dock：右侧导航 rail 在 v1.4 UI 基线中校准为 `52px`（约原 64px 的 0.8 倍）。
+
+Threads 搜索语义（v1.4 UI 基线）：
+- 搜索范围：`title + snippet + messages.content_text`（user + ai）。
+- 触发门槛：正文搜索在 query 长度 `>=2` 时触发；单字符仅标题/摘要匹配。
+- 排序：保持 `updated_at` 最近优先，不切换为相关性排序。
+- 命中反馈：仅正文命中时显示轻量提示 `Matched in messages`。
 
 v1.4 命名契约（文档冻结）：
 - UI 标签：`Threads / Insights / Data / Settings`

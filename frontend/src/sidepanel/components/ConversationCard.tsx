@@ -120,6 +120,7 @@ interface ConversationCardProps {
   onOpenSource?: (conversation: Conversation) => void;
   onDelete?: (id: number) => Promise<void> | void;
   onRenameTitle?: (id: number, title: string) => Promise<boolean>;
+  matchedInMessagesOnly?: boolean;
 }
 
 export function ConversationCard({
@@ -129,6 +130,7 @@ export function ConversationCard({
   onOpenSource,
   onDelete,
   onRenameTitle,
+  matchedInMessagesOnly = false,
 }: ConversationCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -351,11 +353,18 @@ export function ConversationCard({
             {conversation.snippet}
           </p>
 
-          <div className="mt-2 flex items-center justify-between">
-            <span className="flex items-center gap-1 text-vesti-xs text-text-tertiary">
-              <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.75} />
-              {conversation.message_count} messages · {turnCount} turns
-            </span>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex items-center gap-1 text-vesti-xs text-text-tertiary">
+                <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.75} />
+                {conversation.message_count} messages · {turnCount} turns
+              </span>
+              {matchedInMessagesOnly ? (
+                <span className="shrink-0 rounded-full border border-border-subtle bg-bg-primary px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
+                  Matched in messages
+                </span>
+              ) : null}
+            </div>
 
             <div className="flex items-center gap-1.5">
               <ActionIconButton

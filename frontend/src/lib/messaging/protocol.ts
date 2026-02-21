@@ -75,6 +75,13 @@ export type RequestMessage =
       payload: { conversationId: number };
     }
   | {
+      type: "SEARCH_CONVERSATION_IDS_BY_TEXT";
+      target?: "offscreen";
+      via?: "background";
+      requestId?: string;
+      payload: { query: string };
+    }
+  | {
       type: "DELETE_CONVERSATION";
       target?: "offscreen";
       via?: "background";
@@ -180,6 +187,7 @@ export type ResponseDataMap = {
   };
   GET_CONVERSATIONS: Conversation[];
   GET_MESSAGES: Message[];
+  SEARCH_CONVERSATION_IDS_BY_TEXT: number[];
   DELETE_CONVERSATION: { deleted: boolean };
   UPDATE_CONVERSATION_TITLE: { updated: boolean; conversation: Conversation };
   GET_DASHBOARD_STATS: DashboardStats;

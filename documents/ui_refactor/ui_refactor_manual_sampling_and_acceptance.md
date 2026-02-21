@@ -56,6 +56,10 @@ Threads child flow (mandatory):
 10. KB entry exists in Insights header and nowhere else as structural entry.
 11. Compaction trigger in Threads + compaction stats in Data.
 12. External links placed in Settings only.
+13. Threads full-text search: query hits title, no `Matched in messages` hint.
+14. Threads full-text search: query hits only message body, hint appears.
+15. Query length 1 does not trigger body-scan behavior; result remains title/snippet-only.
+16. Right navigation rail width remains `52px` and main content area expansion is visually preserved.
 
 ---
 
@@ -71,6 +75,13 @@ Each case must include:
 For regression-sensitive cases, include:
 - pre-refactor screenshot reference
 - post-refactor screenshot
+
+For full-text search cases, include:
+- search query string and expected hit source (title/snippet/body)
+- screenshot proof of `Matched in messages` hint presence/absence
+
+For navigation-rail calibration case, include:
+- screenshot or DevTools evidence showing rail width is `52px` on sidepanel root
 
 ---
 
