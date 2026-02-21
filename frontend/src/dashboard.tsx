@@ -7,6 +7,7 @@ import {
   getTopics,
   runGardener,
   getRelatedConversations,
+  getMessages,
 } from "~lib/services/storageService";
 
 export default function VestiDashboardPage() {
@@ -14,7 +15,7 @@ export default function VestiDashboardPage() {
     <VestiDashboardShell
       logoSrc={LOGO_BASE64}
       rootClassName="vesti-options"
-      storage={{ getConversations, getTopics, runGardener, getRelatedConversations }}
+      storage={{ getConversations, getTopics, runGardener, getRelatedConversations, getMessages }}
     />
   );
 }

@@ -6,13 +6,14 @@ import {
   getTopics,
   runGardener,
   getRelatedConversations,
+  getMessages,
 } from '@/lib/storageService';
 
 export default function VestiDashboardPage() {
   return (
     <VestiDashboard
       logoSrc="/favicon.svg"
-      storage={{ getConversations, getTopics, runGardener, getRelatedConversations }}
+      storage={{ getConversations, getTopics, runGardener, getRelatedConversations, getMessages }}
     />
   );
 }

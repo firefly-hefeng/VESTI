@@ -50,6 +50,14 @@ export interface RelatedConversation {
   similarity: number;
 }
 
+export interface Message {
+  id: number;
+  conversation_id: number;
+  role: "user" | "ai";
+  content_text: string;
+  created_at: number;
+}
+
 export interface Note {
   id: number;
   title: string;
@@ -76,4 +84,5 @@ export type StorageApi = {
     conversationId: number,
     limit?: number
   ) => Promise<RelatedConversation[]>;
+  getMessages?: (conversationId: number) => Promise<Message[]>;
 };

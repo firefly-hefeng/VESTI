@@ -10,7 +10,13 @@ import {
   Check,
   ArrowRight,
 } from "lucide-react";
-import type { Platform, Topic, StorageApi, RelatedConversation } from "../types";
+import type {
+  Platform,
+  Topic,
+  StorageApi,
+  RelatedConversation,
+  Message,
+} from "../types";
 import { MOCK_NOTES } from "../mock-data";
 import { useLibraryData } from "../contexts/library-data";
 
@@ -41,6 +47,7 @@ type LibraryTabProps = {
 export function LibraryTab({ storage }: LibraryTabProps) {
   const { topics, conversations } = useLibraryData();
   const getRelatedConversations = storage.getRelatedConversations;
+  const getMessages = storage.getMessages;
   const [viewMode, setViewMode] = useState<ViewMode>("conversations");
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
@@ -50,6 +57,10 @@ export function LibraryTab({ storage }: LibraryTabProps) {
   const [relatedConversations, setRelatedConversations] = useState<RelatedConversation[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [relatedError, setRelatedError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [isConversationExpanded, setIsConversationExpanded] = useState(false);
 
   // Note editing state
   const [editingTitle, setEditingTitle] = useState(false);
@@ -95,6 +106,10 @@ export function LibraryTab({ storage }: LibraryTabProps) {
   }, [conversations, selectedConversationId]);
 
   useEffect(() => {
+    setIsConversationExpanded(false);
+  }, [selectedConversationId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const loadRelated = async () => {
@@ -132,6 +147,45 @@ export function LibraryTab({ storage }: LibraryTabProps) {
     };
   }, [selectedConversationId, getRelatedConversations]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMessages = async () => {
+      if (!selectedConversationId || !getMessages) {
+        setMessages([]);
+        setMessagesError(null);
+        return;
+      }
+
+      setMessagesLoading(true);
+      setMessagesError(null);
+      setMessages([]);
+      try {
+        const data = await getMessages(selectedConversationId);
+        if (!cancelled) {
+          setMessages(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMessages([]);
+          setMessagesError(
+            (error as Error)?.message ?? "Failed to load messages"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setMessagesLoading(false);
+        }
+      }
+    };
+
+    void loadMessages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedConversationId, getMessages]);
+
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
@@ -150,6 +204,24 @@ export function LibraryTab({ storage }: LibraryTabProps) {
 
   const selectedConversation = conversations.find((c) => c.id === selectedConversationId);
   const selectedNote = MOCK_NOTES.find((n) => n.id === selectedNoteId);
+  const messageCount = messages.length;
+  const messageDate =
+    messages.length > 0 ? messages[0].created_at : selectedConversation?.updated_at;
+  const previewMessages = useMemo(() => {
+    if (messages.length === 0) return [];
+    const firstUserIndex = messages.findIndex((message) => message.role === "user");
+    const firstAiIndex = messages.findIndex((message) => message.role === "ai");
+    if (firstUserIndex === -1 && firstAiIndex === -1) return [];
+    if (firstUserIndex !== -1 && firstAiIndex !== -1) {
+      return firstUserIndex <= firstAiIndex
+        ? [messages[firstUserIndex], messages[firstAiIndex]]
+        : [messages[firstAiIndex], messages[firstUserIndex]];
+    }
+    const index = firstUserIndex !== -1 ? firstUserIndex : firstAiIndex;
+    return index !== -1 ? [messages[index]] : [];
+  }, [messages]);
+  const visibleMessages = isConversationExpanded ? messages : previewMessages;
+  const canToggleMessages = messageCount > previewMessages.length;
   const normalizeTags = (value: unknown): string[] => {
     if (!Array.isArray(value)) return [];
     return value.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0);
@@ -192,6 +264,15 @@ export function LibraryTab({ storage }: LibraryTabProps) {
 
   const filteredConversations = tagFilteredConversations;
 
+
+  function formatDate(timestamp?: number): string {
+    if (!timestamp) return "Unknown date";
+    return new Intl.DateTimeFormat("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(timestamp));
+  }
 
   function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -529,9 +610,9 @@ export function LibraryTab({ storage }: LibraryTabProps) {
                   {selectedConversation.platform}
                 </span>
                 <span>·</span>
-                <span>January 15, 2024</span>
+                <span>{formatDate(messageDate)}</span>
                 <span>·</span>
-                <span>12 messages</span>
+                <span>{messageCount} messages</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {activeTags.map((tag) => (
@@ -592,28 +673,69 @@ export function LibraryTab({ storage }: LibraryTabProps) {
             </div>
 
             {/* Block C - Conversation Content */}
-            <div className="space-y-6">
-              <div>
-                <div className="text-xs font-sans text-text-tertiary uppercase tracking-wider mb-2">
-                  You
+            <div className="prose prose-slate max-w-none">
+              {messagesLoading && (
+                <div className="text-[13px] font-sans text-text-tertiary">
+                  Loading messages...
                 </div>
-                <p className="text-base font-serif text-text-primary leading-relaxed">
-                  How can I build a reusable component library for my React app?
-                </p>
-              </div>
-
-              <div>
-                <div className="text-xs font-sans text-text-tertiary uppercase tracking-wider mb-2">
-                  ChatGPT
+              )}
+              {!messagesLoading && messagesError && (
+                <div className="text-[13px] font-sans text-text-tertiary">
+                  Unable to load messages.
                 </div>
-                <div className="p-3 rounded-lg bg-bg-surface-ai-message text-base font-serif text-text-primary leading-relaxed">
-                  A reusable component library should start with a clear design system and consistent
-                  API patterns. Focus on composition, strong typing, and a documented structure for
-                  scalability. Key steps include defining tokens, building base components, and setting
-                  up proper documentation with Storybook or similar tools.
+              )}
+              {!messagesLoading && !messagesError && messages.length === 0 && (
+                <div className="text-[13px] font-sans text-text-tertiary">
+                  No messages captured yet.
                 </div>
-              </div>
+              )}
+              {visibleMessages.map((message) => {
+                const isUser = message.role === "user";
+                return (
+                  <div key={message.id} className="mb-6">
+                    {isUser ? (
+                      <div className="text-[11px] font-sans text-text-tertiary uppercase tracking-wide mb-2">
+                        You
+                      </div>
+                    ) : (
+                      <span
+                        className="inline-block px-2 py-0.5 rounded-md text-[11px] font-sans font-medium leading-none uppercase tracking-wide mb-2"
+                        style={{
+                          backgroundColor: platformBackgrounds[selectedConversation.platform],
+                          color: platformColors[selectedConversation.platform],
+                        }}
+                      >
+                        {selectedConversation.platform}
+                      </span>
+                    )}
+                    <div
+                      className={`text-base font-serif text-text-primary leading-relaxed whitespace-pre-wrap ${
+                        isUser ? "" : "p-3 rounded-lg bg-bg-surface-ai-message"
+                      }`}
+                    >
+                      {message.content_text}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+
+            {canToggleMessages && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsConversationExpanded((prev) => !prev)}
+                  className="inline-flex items-center gap-1 text-[12px] font-sans text-text-tertiary hover:text-text-secondary transition-colors"
+                >
+                  {isConversationExpanded ? "Collapse" : "Expand"}
+                  {isConversationExpanded ? (
+                    <ChevronUp strokeWidth={1.5} className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronDown strokeWidth={1.5} className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+            )}
 
             {/* Related Notes */}
             {selectedConversation && (

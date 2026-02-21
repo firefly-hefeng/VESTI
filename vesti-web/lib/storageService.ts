@@ -1,6 +1,7 @@
 import type {
   Conversation,
   GardenerResult,
+  Message,
   Platform,
   RelatedConversation,
   Topic,
@@ -47,6 +48,12 @@ type RequestMessage =
       target?: 'offscreen';
       requestId?: string;
       payload: { conversationId: number; limit?: number };
+    }
+  | {
+      type: 'GET_MESSAGES';
+      target?: 'offscreen';
+      requestId?: string;
+      payload: { conversationId: number };
     };
 
 type ResponseDataMap = {
@@ -56,6 +63,7 @@ type ResponseDataMap = {
   UPDATE_CONVERSATION_TOPIC: { updated: boolean; conversation: Conversation };
   RUN_GARDENER: { updated: boolean; conversation: Conversation; result: GardenerResult };
   GET_RELATED_CONVERSATIONS: RelatedConversation[];
+  GET_MESSAGES: Message[];
 };
 
 type ResponseMessage<T extends keyof ResponseDataMap = keyof ResponseDataMap> =
@@ -188,4 +196,14 @@ export async function getRelatedConversations(
     target: 'offscreen',
     payload: { conversationId, limit },
   }, LONG_RUNNING_TIMEOUT_MS) as Promise<RelatedConversation[]>;
+}
+
+export async function getMessages(
+  conversationId: number
+): Promise<Message[]> {
+  return sendRequest({
+    type: 'GET_MESSAGES',
+    target: 'offscreen',
+    payload: { conversationId },
+  }) as Promise<Message[]>;
 }
