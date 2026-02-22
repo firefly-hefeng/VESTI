@@ -1,0 +1,46 @@
+﻿name: prompt-schema-drift-pr
+
+on:
+  pull_request:
+    paths:
+      - "documents/prompt_engineering/**"
+      - "frontend/src/lib/prompts/**"
+      - "frontend/src/lib/services/insightSchemas.ts"
+      - "scripts/eval-prompts.ts"
+      - "eval/**"
+      - "frontend/package.json"
+      - "frontend/pnpm-lock.yaml"
+
+jobs:
+  eval-mock-strict:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install frontend deps
+        run: pnpm -C frontend install --frozen-lockfile
+
+      - name: Run prompt eval (mock strict)
+        run: pnpm -C frontend eval:prompts --mode=mock --strict
+
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prompt-eval-mock-report
+          path: |
+            eval/reports/latest.json
+            eval/reports/diff-vs-baseline.md
+          if-no-files-found: warn

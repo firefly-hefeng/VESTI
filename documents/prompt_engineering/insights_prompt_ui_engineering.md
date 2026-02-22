@@ -10,7 +10,7 @@
 
 ## 0. Revision Notes
 
-1. Synced with `v1.1.0-rc.4` implementation: Summary v2 + Weekly Lite + adapter bridge coexistence.
+1. Synced with `v1.7.0-rc.x` docs freeze: `conversation_summary.v3` and `weekly_lite.v2` as defaults, with one-cycle legacy coexistence.
 2. Synced with Demo routing: Node proxy dual-model fallback (`DS14 -> Qwen3-14B`, one retry).
 3. Synced with output resilience: empty `json_mode` content degrades to `prompt_json`, then `fallback_text`.
 4. Warm Paper theme is mandatory: restore sepia-like paper palette, keep typography upgrades.
@@ -79,7 +79,7 @@ Interpretation:
 
 ### 4.1 Default prompt strategy (`current`)
 
-1. Conversation Summary: thinking-journey template (v2 schema target).
+1. Conversation Summary: thinking-journey template (v3 schema target).
 2. Weekly Digest: Weekly Lite template (short context, MVP-safe).
 
 ### 4.2 Prompt version governance
@@ -107,10 +107,12 @@ Interpretation:
 
 - Conversation:
   - `conversation_summary.v1` (legacy)
-  - `conversation_summary.v2` (default)
+  - `conversation_summary.v2` (legacy, one-cycle coexistence)
+  - `conversation_summary.v3` (default)
 - Weekly:
   - `weekly_report.v1` (legacy)
-  - `weekly_lite.v1` (default)
+  - `weekly_lite.v1` (legacy, one-cycle coexistence)
+  - `weekly_lite.v2` (default)
 
 ### 5.2 Adapter bridge responsibilities
 
@@ -120,8 +122,8 @@ Interpretation:
 
 ### 5.3 Presentation contract (current)
 
-1. Summary: `core_question + thinking_journey + key_insights + unresolved_threads + actionable_next_steps`
-2. Weekly Lite: `highlights + recurring_questions + unresolved_threads + suggested_focus + evidence + insufficient_data`
+1. Summary (v3): `core_question + thinking_journey[] + key_insights[] + unresolved_threads + actionable_next_steps`
+2. Weekly Lite (v2): `highlights + recurring_questions + cross_domain_echoes + unresolved_threads + suggested_focus + evidence + insufficient_data`
 
 ---
 
@@ -222,8 +224,8 @@ Assignment:
 
 ### A. Prompt / Schema
 
-1. Conversation output hits v2 required fields.
-2. Weekly output hits `weekly_lite.v1`; `<3` conversations sets `insufficient_data=true`.
+1. Conversation output hits `conversation_summary.v3` required fields.
+2. Weekly output hits `weekly_lite.v2`; `<3` conversations set `insufficient_data=true`, with `cross_domain_echoes` present (can be empty).
 3. Structured failure degrades to readable `fallback_text`.
 
 ### B. Warm theme
@@ -256,7 +258,7 @@ Assignment:
 
 ### P0 (implemented baseline)
 
-1. Summary v2 + Weekly Lite templates
+1. Summary v3 + Weekly Lite v2 templates (legacy bridge retained for one-cycle coexistence)
 2. Adapter bridge for legacy compatibility
 3. Warm Paper UI + Settings interaction fixes
 4. Node proxy + dual-model fallback

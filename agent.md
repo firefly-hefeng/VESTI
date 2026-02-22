@@ -17,6 +17,33 @@ You are developing a **Local-First** browser extension, where the core values ar
 
 The project adopts a layered architecture with a clear separation of concerns. The bottom layer is the Core Engine (Observer + Parser + Middleware + Database), the middle is the Service and Messaging Coordination Layer, and the top is the UI Presentation Layer. Each layer must be independently testable and replaceable, with no direct cross-layer dependencies allowed. When writing a module, always ask yourself: Does this module only depend on the interfaces it is supposed to know?
 
+## Release-Line Governance (v1.6+)
+
+Use strict release-line boundaries to avoid scope bleed:
+
+1. `v1.6.0-rc.x` — Data pipeline refactor and dual-track capture only (`content_text + content_ast`, schema/migration/parser contracts, defensive parsing, performance fallback).
+2. `v1.7.0-rc.x` — Multi-agent orchestration and Prompt-as-Code backend runtime.
+3. `v1.8.0-rc.x` — Reader and Insights UI rendering/interaction upgrades.
+
+Boundary rules:
+
+1. Do not mix v1.7 orchestration implementation into v1.6 commits.
+2. Do not mix v1.8 UI redesign work into v1.6/v1.7 commits.
+3. Interface placeholders are allowed cross-line; behavior rollout is not.
+4. Release gating is serial: `v1.6 -> v1.7 -> v1.8`.
+5. Each line uses independent RC tags (`1.6.0-rc.x`, `1.7.0-rc.x`, `1.8.0-rc.x`).
+
+### v1.7 Prompt and Orchestration Governance
+
+For `v1.7.0-rc.x`, enforce the following stable constraints:
+
+1. Prompt source-of-truth is `documents/prompt_engineering/*.md` only.
+2. Runtime prompt loading must consume generated artifacts, not direct markdown file reads.
+3. Agent B contract is strict mapping with zero-inference veto.
+4. Orchestration progress visibility uses push events with typed stage payloads.
+5. v1.7 rollout is flag-gated in `chrome.storage.local` with default-off behavior.
+6. Prompt/schema drift gates must include local strict eval plus PR/nightly workflow checks.
+
 ## Core Principles of Code Quality
 
 ### Type Safety is the Top Priority
