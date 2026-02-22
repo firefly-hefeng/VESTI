@@ -202,6 +202,32 @@ export async function listMessages(
   return records.map(toMessage);
 }
 
+export async function searchConversationIdsByText(query: string): Promise<number[]> {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.length < 2) {
+    return [];
+  }
+
+  const conversationIds = new Set<number>();
+  await db.messages.toCollection().each((record) => {
+    const conversationId = record.conversation_id;
+    if (typeof conversationId !== "number" || conversationIds.has(conversationId)) {
+      return;
+    }
+
+    const content = record.content_text;
+    if (typeof content !== "string") {
+      return;
+    }
+
+    if (content.toLowerCase().includes(normalizedQuery)) {
+      conversationIds.add(conversationId);
+    }
+  });
+
+  return Array.from(conversationIds);
+}
+
 export async function deleteConversation(id: number): Promise<boolean> {
   await db.transaction("rw", db.conversations, db.messages, async () => {
     await db.messages.where("conversation_id").equals(id).delete();

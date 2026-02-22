@@ -1,0 +1,60 @@
+﻿name: prompt-live-smoke-nightly
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  eval-live-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install frontend deps
+        run: pnpm -C frontend install --frozen-lockfile
+
+      - name: Check live secrets
+        id: secrets_check
+        env:
+          VESTI_EVAL_API_KEY: ${{ secrets.VESTI_EVAL_API_KEY }}
+          VESTI_EVAL_MODEL_ID: ${{ secrets.VESTI_EVAL_MODEL_ID }}
+        run: |
+          if [ -z "$VESTI_EVAL_API_KEY" ] || [ -z "$VESTI_EVAL_MODEL_ID" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Live smoke skipped: missing VESTI_EVAL_API_KEY or VESTI_EVAL_MODEL_ID"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run prompt eval (live smoke)
+        if: steps.secrets_check.outputs.ready == 'true'
+        env:
+          VESTI_EVAL_BASE_URL: ${{ secrets.VESTI_EVAL_BASE_URL }}
+          VESTI_EVAL_API_KEY: ${{ secrets.VESTI_EVAL_API_KEY }}
+          VESTI_EVAL_MODEL_ID: ${{ secrets.VESTI_EVAL_MODEL_ID }}
+          VESTI_EVAL_TEMPERATURE: ${{ secrets.VESTI_EVAL_TEMPERATURE }}
+          VESTI_EVAL_MAX_TOKENS: ${{ secrets.VESTI_EVAL_MAX_TOKENS }}
+        run: pnpm -C frontend eval:prompts --mode=live --strict --limit=3 --case-delay-ms=300
+
+      - name: Upload eval reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prompt-eval-live-report
+          path: |
+            eval/reports/latest.json
+            eval/reports/raw/**
+          if-no-files-found: warn

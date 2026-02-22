@@ -46,7 +46,7 @@ export function Dock({ currentPage, onNavigate }: DockProps) {
   return (
     <nav
       aria-label="Vesti navigation"
-      className="flex w-16 flex-col items-center justify-between border-l border-border-subtle bg-bg-sidebar px-2 py-4"
+      className="flex w-[52px] flex-col items-center justify-between border-l border-border-subtle bg-bg-sidebar px-1 py-4"
     >
       <div className="flex flex-col items-center gap-2">
         <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-lg border border-border-subtle bg-bg-primary/70">

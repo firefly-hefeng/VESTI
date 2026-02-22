@@ -11,8 +11,8 @@ Audience: QA, release owner, frontend, UI design
 Minimum mandatory set:
 - 4 top-level regions x 3 scenario types = 12 base cases
 - plus 4 Threads->Reader child-flow cases
-- plus 12 cross-cutting interaction and boundary cases
-- total minimum: 28 cases
+- plus 20 cross-cutting interaction and boundary cases
+- total minimum: 36 cases
 
 Scenario types:
 1. standard ready state
@@ -42,7 +42,7 @@ Threads child flow (mandatory):
 
 ---
 
-## 3. Cross-Cutting Scenarios (Minimum 12)
+## 3. Cross-Cutting Scenarios (Minimum 20)
 
 1. Keyboard navigation end-to-end.
 2. Focus-visible correctness for icon buttons.
@@ -56,6 +56,14 @@ Threads child flow (mandatory):
 10. KB entry exists in Insights header and nowhere else as structural entry.
 11. Compaction trigger in Threads + compaction stats in Data.
 12. External links placed in Settings only.
+13. Threads full-text search: query hits title, no `Matched in messages` hint.
+14. Threads full-text search: query hits only message body, hint appears.
+15. Query length 1 does not trigger body-scan behavior; result remains title/snippet-only.
+16. Right navigation rail width remains `52px` and main content area expansion is visually preserved.
+17. Settings shows three group labels in order: Personalisation -> System -> Support.
+18. Settings Language row is `Soon`, non-expandable, and does not show accordion affordance.
+19. Support block has exactly three rows (Docs & Help / Send Feedback / What's New), not accordion cards.
+20. Send Feedback row toggles inline reveal correctly; email copy action and issue-link path are available.
 
 ---
 
@@ -71,6 +79,18 @@ Each case must include:
 For regression-sensitive cases, include:
 - pre-refactor screenshot reference
 - post-refactor screenshot
+
+For full-text search cases, include:
+- search query string and expected hit source (title/snippet/body)
+- screenshot proof of `Matched in messages` hint presence/absence
+
+For navigation-rail calibration case, include:
+- screenshot or DevTools evidence showing rail width is `52px` on sidepanel root
+
+For Settings support-density cases, include:
+- screenshot evidence for three-group label order and three support rows
+- link-target verification for README and Releases destinations
+- inline reveal open/close evidence and email copy result feedback
 
 ---
 
@@ -108,7 +128,7 @@ Required:
 ```md
 # v1.4 UI Refactor Sampling Result
 
-- Planned: 28
+- Planned: 36
 - Executed: <n>
 - Passed: <n>
 - Failed: <n>

@@ -291,6 +291,20 @@ pnpm build
 
 ---
 
+### Settings 信息密度与 Support 入口（v1.4）
+
+为保证 Settings 的可读性与操作效率，v1.4 采用以下固定规则：
+
+1. 分组结构固定为 `Personalisation / System / Support`。  
+2. `Support` 固定三项平铺行（非 accordion）：
+   - `Docs & Help` -> `https://github.com/abraxas914/VESTI#readme`
+   - `Send Feedback`（行内展开）-> `suyc23@gmail.com` + `https://github.com/abraxas914/VESTI/issues/new/choose`
+   - `What's New` -> `https://github.com/abraxas914/VESTI/releases`
+3. Settings 展开区仅保留三类文案：操作指令 / 当前状态 / 即时警告。  
+4. 详细背景解释统一下沉到 README，不在 Settings 中堆叠长段灰色说明。  
+
+这意味着 Settings 页面负责“完成动作”，README 负责“解释原理”。
+
 ## 🧭 当前限制与清晰的演进路径
 
 心迹当前处于黑客松 MVP 阶段，这意味着我们刻意选择了一个狭窄但深入的切入点来验证核心假设。这些限制不是技术能力不足，而是资源聚焦的战略选择。更重要的是，我们为每一个限制都设计了清晰的演进路径。与大多数黑客松项目结束后就悄然无声不同，心迹拥有明确的技术路线图和持续优化的承诺。

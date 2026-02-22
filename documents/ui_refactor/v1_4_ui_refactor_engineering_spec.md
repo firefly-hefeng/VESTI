@@ -23,6 +23,7 @@ Locked constraints:
 
 IA source of truth:
 - `documents/ui_refactor/v1_4_information_architecture_contract.md`
+- `documents/ui_refactor/v1_4_settings_information_density_contract.md`
 
 ---
 
@@ -78,6 +79,7 @@ Known pain points:
   - Settings
 - Reader remains Threads-internal drill-down state.
 - Internal route id compatibility remains `timeline | insights | data | settings`.
+- Right-side navigation rail is width-calibrated to `52px` (~0.8x of original 64px baseline).
 
 ## 4.2 Center logo action
 - Must be a single deterministic action: manual archive active thread.
@@ -100,6 +102,13 @@ Each level must map to explicit design tokens (background, border, shadow, text 
 - Primary action: one per major section.
 - Secondary actions: grouped and visually subordinate.
 - Destructive actions: isolated with explicit confirmation guard.
+
+## 4.6 Settings density and grouping
+- Settings is grouped into `Personalisation`, `System`, and `Support`.
+- `Appearance` and system controls remain disclosure-based.
+- `Language` is a disabled-soon non-expandable row (no chevron affordance).
+- `Support` is a flat-row block (`Docs & Help`, `Send Feedback`, `What's New`) rather than accordion.
+- `Send Feedback` uses inline reveal (email + copy + issue link), not toggle semantics.
 
 ---
 
@@ -130,6 +139,15 @@ Requirements:
 4. Threads card quick actions must remain one-click accessible.
 5. Message/turn labels and platform tags must keep semantic consistency.
 6. Center logo action states must be visually distinct and diagnosable.
+7. Threads search contract:
+   - Search scope = `title + snippet + messages.content_text` (user + ai).
+   - Full-text body scan triggers only when query length is `>=2`.
+   - Result ordering remains `updated_at` descending.
+   - If matched only in message body, show subtle hint `Matched in messages`.
+8. Settings copy density contract:
+   - Keep only instruction/status/warning copy in accordion body.
+   - Move long-form explanation text to README.
+   - Do not add second-level explanation toggles.
 
 ---
 
@@ -139,16 +157,19 @@ Requirements:
 - apply naming contract in UI copy (`Threads` label)
 - unify page scaffold and spacing scale
 - normalize typography hierarchy
+- calibrate right navigation rail width to preserve usable main-content space
 
 ### Phase 2 (P0): Threads + Reader flow
 - refactor card information hierarchy
 - optimize Reader message layout and metadata row
 - align per-thread actions (including compaction trigger location)
+- integrate full-text search merge path (title/snippet + message body) with debounce/cache/race guard
 
 ### Phase 3 (P0): Insights + Data + Settings
 - standardize Insights header (including KB entry)
 - normalize Data dashboard composition and compaction audit surface
 - align Settings structure (meta controls + external links section)
+- freeze Settings grouping and support interaction semantics per settings density contract
 
 ### Phase 4 (P1): hardening and polish
 - visual regression sweep

@@ -26,6 +26,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 - Added internal `turn_count` semantics (AI replies) to conversation capture/persistence and upgraded Smart `minTurns` evaluation to the same AI-turn metric.
 - Timeline/Insights counters now display `X messages · Y turns`; Reader header now labels count as messages.
 - Platform badge color tokens are now unified to six Metro theme colors (ChatGPT/Claude/Gemini/DeepSeek/Qwen/Doubao).
+- Release-line governance is split into serial tracks: `v1.6` data pipeline, `v1.7` multi-agent/prompt backend, `v1.8` Reader+Insights UI.
 
 ### Fixed
 - Gemini title extraction now prefers `[role='heading']`, removes `You said` prefix for title-only parsing, and falls back safely when generic headings are detected.
@@ -38,9 +39,28 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 - Updated `documents/capture_engine/v1_3_platform_expansion_spec.md` with Phase2 execution profile and strict host scope.
 - Added `documents/capture_engine/v1_3_phase2_execution_log.md`.
 - Added `documents/capture_engine/v1_3_phase2_manual_sampling_checklist.md`.
+- Added `documents/reader_pipeline/v1_6_data_pipeline_dual_track_spec.md`.
+- Added `documents/reader_pipeline/v1_6_ast_probe_cheat_sheet.md`.
+- Added `documents/reader_pipeline/v1_6_schema_v5_migration_spec.md`.
+- Added `documents/reader_pipeline/v1_6_performance_fallback_spec.md`.
+- Added `documents/reader_pipeline/v1_6_manual_sampling_and_acceptance.md`.
+- Added `documents/orchestration/v1_7_multi_agent_orchestration_spec.md`.
+- Added `documents/orchestration/v1_7_runtime_event_contract.md`.
+- Added `documents/orchestration/v1_7_feature_flag_rollout_spec.md`.
+- Added `documents/orchestration/v1_7_manual_sampling_and_acceptance.md`.
+- Added `documents/prompt_engineering/v1_7_prompt_as_code_contract.md`.
+- Added `documents/prompt_engineering/v1_7_prompt_schema_drift_gate.md`.
+- Added canonical v1.7 prompt files: `documents/prompt_engineering/thread-summary-skill.md` and `documents/prompt_engineering/weekly-digest-skill.md`.
+- Added temporary alias note: `documents/prompt_engineering/synthesis_skill.md`.
+- Updated `documents/prompt_engineering/compaction-skill.md` to Agent A v2 contract (volume rigidity, empirical anchoring veto, subject isolation, sparse degradation rules).
+- Added `documents/prompt_engineering/compaction-skill-rubric.md` (scoring matrix + veto rules split from runtime prompt).
+- Updated `documents/prompt_engineering/v1_7_prompt_as_code_contract.md` with Agent A prompt/rubric layering rules.
+- Updated `documents/prompt_engineering/v1_7_prompt_schema_drift_gate.md` with Agent A specialized drift checks.
+- Aligned v1.7 planning docs to the new schema matrix: defaults `conversation_summary.v3` and `weekly_lite.v2`, with one-cycle legacy coexistence for `v2/v1`.
 
 ### Chore
-- N/A
+- Added CI workflow `/.github/workflows/prompt-schema-drift-pr.yml` for strict mock prompt-schema drift gating on PR changes.
+- Added CI workflow `/.github/workflows/prompt-live-smoke-nightly.yml` for scheduled live smoke evaluation with optional secrets.
 
 ---
 

@@ -5,6 +5,7 @@ import { interceptAndPersistCapture } from "../lib/capture/storage-interceptor";
 import {
   listConversations,
   listMessages,
+  searchConversationIdsByText,
   deleteConversation,
   updateConversationTitle,
   getDashboardStats,
@@ -56,6 +57,10 @@ async function handleRequest(message: RequestMessage): Promise<ResponseMessage> 
       }
       case "GET_MESSAGES": {
         const data = await listMessages(message.payload.conversationId);
+        return { ok: true, type: messageType, data };
+      }
+      case "SEARCH_CONVERSATION_IDS_BY_TEXT": {
+        const data = await searchConversationIdsByText(message.payload.query);
         return { ok: true, type: messageType, data };
       }
       case "DELETE_CONVERSATION": {

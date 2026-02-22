@@ -173,9 +173,9 @@ Non-retryable:
 
 ## 5. Prompt/Schema Linkage (Insights)
 
-1. Conversation default schema: `conversation_summary.v2`.
-2. Weekly default schema: `weekly_lite.v1`.
-3. Legacy coexistence remains required (`v1` still renderable).
+1. Conversation default schema: `conversation_summary.v3`.
+2. Weekly default schema: `weekly_lite.v2`.
+3. Legacy coexistence remains required for one release cycle (`conversation_summary.v2` and `weekly_lite.v1` stay renderable).
 4. Visual details are governed by `insights_prompt_ui_engineering.md`.
 
 ---
