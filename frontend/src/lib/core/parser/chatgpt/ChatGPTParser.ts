@@ -10,6 +10,8 @@ import {
   safeTextContent,
   uniqueNodesInDocumentOrder,
 } from "../shared/selectorUtils";
+import { extractAstFromElement } from "../shared/astExtractor";
+import { astPerfModeController, type AstPerfMode } from "../shared/astPerfMode";
 import { logger } from "../../../utils/logger";
 
 const SELECTORS = {
@@ -62,6 +64,19 @@ interface ParserStats {
   roleDistribution: Record<MessageRole, number>;
   droppedUnknownRole: number;
   droppedNoise: number;
+  parse_duration_ms: number;
+  perf_mode: AstPerfMode;
+  next_perf_mode: AstPerfMode;
+  degraded_nodes_count: number;
+  ast_node_count: number;
+  message_count: number;
+  platform: Platform;
+}
+
+interface ParsedNodeResult {
+  message: ParsedMessage;
+  astNodeCount: number;
+  degradedNodesCount: number;
 }
 
 export class ChatGPTParser implements IParser {
@@ -81,6 +96,8 @@ export class ChatGPTParser implements IParser {
   }
 
   getMessages(): ParsedMessage[] {
+    const startedAt = performance.now();
+    const perfMode = astPerfModeController.getMode("ChatGPT");
     const rawCandidates = this.collectMessageCandidates();
     const normalized = normalizeCandidateNodes(rawCandidates, {
       minTextLength: 2,
@@ -94,23 +111,49 @@ export class ChatGPTParser implements IParser {
       roleDistribution: { user: 0, ai: 0 },
       droppedUnknownRole: 0,
       droppedNoise: normalized.droppedNoise,
+      parse_duration_ms: 0,
+      perf_mode: perfMode,
+      next_perf_mode: perfMode,
+      degraded_nodes_count: 0,
+      ast_node_count: 0,
+      message_count: 0,
+      platform: "ChatGPT",
     };
 
     const messages: ParsedMessage[] = [];
     for (const node of normalized.nodes) {
-      const parsed = this.parseMessageNode(node);
+      const parsed = this.parseMessageNode(node, perfMode);
       if (!parsed) {
         stats.droppedUnknownRole += 1;
         continue;
       }
-      if (!parsed.textContent.trim()) {
+      if (!parsed.message.textContent.trim()) {
         stats.droppedNoise += 1;
         continue;
       }
 
-      messages.push(parsed);
+      messages.push(parsed.message);
       stats.keptMessages += 1;
-      stats.roleDistribution[parsed.role] += 1;
+      stats.roleDistribution[parsed.message.role] += 1;
+      stats.degraded_nodes_count += parsed.degradedNodesCount;
+      stats.ast_node_count += parsed.astNodeCount;
+    }
+
+    const parseDurationMs = Math.round(performance.now() - startedAt);
+    const modeUpdate = astPerfModeController.record("ChatGPT", parseDurationMs);
+
+    stats.parse_duration_ms = parseDurationMs;
+    stats.next_perf_mode = modeUpdate.mode;
+    stats.message_count = messages.length;
+
+    if (modeUpdate.switched) {
+      logger.warn("parser", "ChatGPT AST perf mode switched", {
+        platform: "ChatGPT",
+        from: modeUpdate.previousMode,
+        to: modeUpdate.mode,
+        parse_duration_ms: parseDurationMs,
+        message_count: messages.length,
+      });
     }
 
     this.logStats(stats, messages);
@@ -146,17 +189,28 @@ export class ChatGPTParser implements IParser {
     return uniqueNodesInDocumentOrder(combinedCandidates);
   }
 
-  private parseMessageNode(node: Element): ParsedMessage | null {
+  private parseMessageNode(node: Element, perfMode: AstPerfMode): ParsedNodeResult | null {
     const role = this.inferRole(node);
     if (!role) return null;
 
     const contentEl = queryFirstWithin(node, SELECTORS.messageContent);
     const textContent = safeTextContent(contentEl ?? node);
+    const ast = extractAstFromElement(contentEl ?? node, {
+      platform: "ChatGPT",
+      perfMode,
+    });
 
     return {
-      role,
-      textContent,
-      htmlContent: contentEl ? contentEl.innerHTML : undefined,
+      message: {
+        role,
+        textContent,
+        contentAst: ast.root,
+        contentAstVersion: ast.root ? "ast_v1" : null,
+        degradedNodesCount: ast.degradedNodesCount,
+        htmlContent: contentEl ? contentEl.innerHTML : undefined,
+      },
+      astNodeCount: ast.astNodeCount,
+      degradedNodesCount: ast.degradedNodesCount,
     };
   }
 

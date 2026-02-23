@@ -11,6 +11,8 @@ import {
   safeTextContent,
   uniqueNodesInDocumentOrder,
 } from "../shared/selectorUtils";
+import { extractAstFromElement } from "../shared/astExtractor";
+import { astPerfModeController, type AstPerfMode } from "../shared/astPerfMode";
 import { logger } from "../../../utils/logger";
 
 const SELECTORS = {
@@ -97,6 +99,13 @@ interface ParserStats {
   roleDistribution: Record<MessageRole, number>;
   droppedUnknownRole: number;
   droppedNoise: number;
+  parse_duration_ms: number;
+  perf_mode: AstPerfMode;
+  next_perf_mode: AstPerfMode;
+  degraded_nodes_count: number;
+  ast_node_count: number;
+  message_count: number;
+  platform: Platform;
 }
 
 interface ExtractionResult {
@@ -105,6 +114,14 @@ interface ExtractionResult {
   totalCandidates: number;
   droppedUnknownRole: number;
   droppedNoise: number;
+  degradedNodesCount: number;
+  astNodeCount: number;
+}
+
+interface ParsedNodeResult {
+  message: ParsedMessage;
+  degradedNodesCount: number;
+  astNodeCount: number;
 }
 
 export class ClaudeParser implements IParser {
@@ -128,11 +145,15 @@ export class ClaudeParser implements IParser {
   }
 
   getMessages(): ParsedMessage[] {
-    const anchorExtraction = this.extractUsingAnchorStrategy();
-    const selectorExtraction = this.extractUsingSelectorStrategy();
+    const startedAt = performance.now();
+    const perfMode = astPerfModeController.getMode("Claude");
+    const anchorExtraction = this.extractUsingAnchorStrategy(perfMode);
+    const selectorExtraction = this.extractUsingSelectorStrategy(perfMode);
     const chosen = this.chooseBestExtraction(anchorExtraction, selectorExtraction);
 
     const dedupedMessages = this.dedupeNearDuplicates(chosen.messages);
+    const parseDurationMs = Math.round(performance.now() - startedAt);
+    const modeUpdate = astPerfModeController.record("Claude", parseDurationMs);
 
     const stats: ParserStats = {
       source: chosen.source,
@@ -141,7 +162,24 @@ export class ClaudeParser implements IParser {
       roleDistribution: { user: 0, ai: 0 },
       droppedUnknownRole: chosen.droppedUnknownRole,
       droppedNoise: chosen.droppedNoise + (chosen.messages.length - dedupedMessages.length),
+      parse_duration_ms: parseDurationMs,
+      perf_mode: perfMode,
+      next_perf_mode: modeUpdate.mode,
+      degraded_nodes_count: chosen.degradedNodesCount,
+      ast_node_count: chosen.astNodeCount,
+      message_count: dedupedMessages.length,
+      platform: "Claude",
     };
+
+    if (modeUpdate.switched) {
+      logger.warn("parser", "Claude AST perf mode switched", {
+        platform: "Claude",
+        from: modeUpdate.previousMode,
+        to: modeUpdate.mode,
+        parse_duration_ms: parseDurationMs,
+        message_count: dedupedMessages.length,
+      });
+    }
 
     for (const message of dedupedMessages) {
       stats.roleDistribution[message.role] += 1;
@@ -165,7 +203,7 @@ export class ClaudeParser implements IParser {
     return extractEarliestTimeFromSelectors(SELECTORS.sourceTimes);
   }
 
-  private extractUsingAnchorStrategy(): ExtractionResult {
+  private extractUsingAnchorStrategy(perfMode: AstPerfMode): ExtractionResult {
     const userNodes = queryAllUnique(SELECTORS.userPrimaryNodes);
     if (userNodes.length === 0) {
       return {
@@ -174,6 +212,8 @@ export class ClaudeParser implements IParser {
         totalCandidates: 0,
         droppedUnknownRole: 0,
         droppedNoise: 0,
+        degradedNodesCount: 0,
+        astNodeCount: 0,
       };
     }
 
@@ -185,12 +225,16 @@ export class ClaudeParser implements IParser {
         totalCandidates: userNodes.length,
         droppedUnknownRole: 0,
         droppedNoise: 0,
+        degradedNodesCount: 0,
+        astNodeCount: 0,
       };
     }
 
     const blocks = Array.from(container.children);
     const messages: ParsedMessage[] = [];
     let droppedNoise = 0;
+    let degradedNodesCount = 0;
+    let astNodeCount = 0;
 
     for (const block of blocks) {
       if (!(block instanceof Element)) {
@@ -210,10 +254,23 @@ export class ClaudeParser implements IParser {
         continue;
       }
 
-      messages.push({
+      const contentEl =
+        role === "user"
+          ? queryFirstWithin(block, SELECTORS.userPrimaryNodes) ||
+            queryFirstWithin(block, SELECTORS.messageContent)
+          : queryFirstWithin(block, SELECTORS.messageContent);
+
+      const parsed = this.buildParsedNode(
         role,
         textContent,
-      });
+        contentEl,
+        block,
+        perfMode,
+      );
+
+      messages.push(parsed.message);
+      degradedNodesCount += parsed.degradedNodesCount;
+      astNodeCount += parsed.astNodeCount;
     }
 
     return {
@@ -222,6 +279,8 @@ export class ClaudeParser implements IParser {
       totalCandidates: blocks.length,
       droppedUnknownRole: 0,
       droppedNoise,
+      degradedNodesCount,
+      astNodeCount,
     };
   }
 
@@ -307,7 +366,7 @@ export class ClaudeParser implements IParser {
     return node.matches(userSelector) || node.querySelector(userSelector) !== null;
   }
 
-  private extractUsingSelectorStrategy(): ExtractionResult {
+  private extractUsingSelectorStrategy(perfMode: AstPerfMode): ExtractionResult {
     const rawCandidates = this.collectMessageCandidates();
     const normalized = normalizeCandidateNodes(rawCandidates, {
       minTextLength: 2,
@@ -318,19 +377,23 @@ export class ClaudeParser implements IParser {
     const messages: ParsedMessage[] = [];
     let droppedUnknownRole = 0;
     let droppedNoise = normalized.droppedNoise;
+    let degradedNodesCount = 0;
+    let astNodeCount = 0;
 
     for (const node of normalized.nodes) {
-      const parsed = this.parseMessageNode(node);
+      const parsed = this.parseMessageNode(node, perfMode);
       if (!parsed) {
         droppedUnknownRole += 1;
         continue;
       }
-      if (!parsed.textContent.trim()) {
+      if (!parsed.message.textContent.trim()) {
         droppedNoise += 1;
         continue;
       }
 
-      messages.push(parsed);
+      messages.push(parsed.message);
+      degradedNodesCount += parsed.degradedNodesCount;
+      astNodeCount += parsed.astNodeCount;
     }
 
     return {
@@ -339,6 +402,8 @@ export class ClaudeParser implements IParser {
       totalCandidates: rawCandidates.length,
       droppedUnknownRole,
       droppedNoise,
+      degradedNodesCount,
+      astNodeCount,
     };
   }
 
@@ -449,7 +514,7 @@ export class ClaudeParser implements IParser {
     return null;
   }
 
-  private parseMessageNode(node: Element): ParsedMessage | null {
+  private parseMessageNode(node: Element, perfMode: AstPerfMode): ParsedNodeResult | null {
     const role = this.inferRole(node);
     if (!role) return null;
 
@@ -460,10 +525,38 @@ export class ClaudeParser implements IParser {
 
     const contentEl = queryFirstWithin(node, SELECTORS.messageContent);
 
-    return {
+    return this.buildParsedNode(
       role,
       textContent,
-      htmlContent: contentEl ? contentEl.innerHTML : undefined,
+      contentEl,
+      node,
+      perfMode,
+    );
+  }
+
+  private buildParsedNode(
+    role: MessageRole,
+    textContent: string,
+    contentEl: Element | null,
+    node: Element,
+    perfMode: AstPerfMode,
+  ): ParsedNodeResult {
+    const ast = extractAstFromElement(contentEl ?? node, {
+      platform: "Claude",
+      perfMode,
+    });
+
+    return {
+      message: {
+        role,
+        textContent,
+        contentAst: ast.root,
+        contentAstVersion: ast.root ? "ast_v1" : null,
+        degradedNodesCount: ast.degradedNodesCount,
+        htmlContent: contentEl ? contentEl.innerHTML : undefined,
+      },
+      degradedNodesCount: ast.degradedNodesCount,
+      astNodeCount: ast.astNodeCount,
     };
   }
 

@@ -10,6 +10,8 @@ import {
   safeTextContent,
   uniqueNodesInDocumentOrder,
 } from "../shared/selectorUtils";
+import { extractAstFromElement } from "../shared/astExtractor";
+import { astPerfModeController, type AstPerfMode } from "../shared/astPerfMode";
 import { logger } from "../../../utils/logger";
 
 const SELECTORS = {
@@ -118,7 +120,13 @@ interface ParserStats {
   roleDistribution: Record<MessageRole, number>;
   droppedNoise: number;
   droppedUnknownRole: number;
-  durationMs: number;
+  parse_duration_ms: number;
+  perf_mode: AstPerfMode;
+  next_perf_mode: AstPerfMode;
+  degraded_nodes_count: number;
+  ast_node_count: number;
+  message_count: number;
+  platform: Platform;
 }
 
 interface ExtractionResult {
@@ -127,6 +135,14 @@ interface ExtractionResult {
   droppedNoise: number;
   droppedUnknownRole: number;
   messages: ParsedMessage[];
+  degradedNodesCount: number;
+  astNodeCount: number;
+}
+
+interface ParsedNodeResult {
+  message: ParsedMessage;
+  degradedNodesCount: number;
+  astNodeCount: number;
 }
 
 export class DeepSeekParser implements IParser {
@@ -151,10 +167,13 @@ export class DeepSeekParser implements IParser {
 
   getMessages(): ParsedMessage[] {
     const startedAt = performance.now();
-    const selectorResult = this.extractUsingSelectorStrategy();
-    const anchorResult = this.extractUsingAnchorStrategy();
+    const perfMode = astPerfModeController.getMode("DeepSeek");
+    const selectorResult = this.extractUsingSelectorStrategy(perfMode);
+    const anchorResult = this.extractUsingAnchorStrategy(perfMode);
     const chosen = this.chooseBestExtraction(selectorResult, anchorResult);
     const deduped = this.dedupeNearDuplicates(chosen.messages);
+    const parseDurationMs = Math.round(performance.now() - startedAt);
+    const modeUpdate = astPerfModeController.record("DeepSeek", parseDurationMs);
 
     const stats: ParserStats = {
       source: chosen.source,
@@ -163,8 +182,24 @@ export class DeepSeekParser implements IParser {
       roleDistribution: { user: 0, ai: 0 },
       droppedNoise: chosen.droppedNoise + (chosen.messages.length - deduped.length),
       droppedUnknownRole: chosen.droppedUnknownRole,
-      durationMs: Math.round(performance.now() - startedAt),
+      parse_duration_ms: parseDurationMs,
+      perf_mode: perfMode,
+      next_perf_mode: modeUpdate.mode,
+      degraded_nodes_count: chosen.degradedNodesCount,
+      ast_node_count: chosen.astNodeCount,
+      message_count: deduped.length,
+      platform: "DeepSeek",
     };
+
+    if (modeUpdate.switched) {
+      logger.warn("parser", "DeepSeek AST perf mode switched", {
+        platform: "DeepSeek",
+        from: modeUpdate.previousMode,
+        to: modeUpdate.mode,
+        parse_duration_ms: parseDurationMs,
+        message_count: deduped.length,
+      });
+    }
 
     for (const message of deduped) {
       stats.roleDistribution[message.role] += 1;
@@ -204,7 +239,7 @@ export class DeepSeekParser implements IParser {
     return extractEarliestTimeFromSelectors(SELECTORS.sourceTimes);
   }
 
-  private extractUsingSelectorStrategy(): ExtractionResult {
+  private extractUsingSelectorStrategy(perfMode: AstPerfMode): ExtractionResult {
     const rawCandidates = this.collectMessageCandidates();
     const normalized = normalizeCandidateNodes(rawCandidates, {
       minTextLength: 2,
@@ -215,19 +250,23 @@ export class DeepSeekParser implements IParser {
     const messages: ParsedMessage[] = [];
     let droppedUnknownRole = 0;
     let droppedNoise = normalized.droppedNoise;
+    let degradedNodesCount = 0;
+    let astNodeCount = 0;
 
     for (const node of normalized.nodes) {
-      const parsed = this.parseMessageNode(node);
+      const parsed = this.parseMessageNode(node, perfMode);
       if (!parsed) {
         droppedUnknownRole += 1;
         continue;
       }
-      if (!parsed.textContent.trim()) {
+      if (!parsed.message.textContent.trim()) {
         droppedNoise += 1;
         continue;
       }
 
-      messages.push(parsed);
+      messages.push(parsed.message);
+      degradedNodesCount += parsed.degradedNodesCount;
+      astNodeCount += parsed.astNodeCount;
     }
 
     return {
@@ -236,10 +275,12 @@ export class DeepSeekParser implements IParser {
       droppedNoise,
       droppedUnknownRole,
       messages,
+      degradedNodesCount,
+      astNodeCount,
     };
   }
 
-  private extractUsingAnchorStrategy(): ExtractionResult {
+  private extractUsingAnchorStrategy(perfMode: AstPerfMode): ExtractionResult {
     const anchors = queryAllUnique(SELECTORS.roleAnchors);
     if (anchors.length === 0) {
       return {
@@ -248,6 +289,8 @@ export class DeepSeekParser implements IParser {
         droppedNoise: 0,
         droppedUnknownRole: 0,
         messages: [],
+        degradedNodesCount: 0,
+        astNodeCount: 0,
       };
     }
 
@@ -258,18 +301,22 @@ export class DeepSeekParser implements IParser {
     const messages: ParsedMessage[] = [];
     let droppedNoise = 0;
     let droppedUnknownRole = 0;
+    let degradedNodesCount = 0;
+    let astNodeCount = 0;
 
     for (const node of resolved) {
-      const parsed = this.parseMessageNode(node);
+      const parsed = this.parseMessageNode(node, perfMode);
       if (!parsed) {
         droppedUnknownRole += 1;
         continue;
       }
-      if (!parsed.textContent.trim()) {
+      if (!parsed.message.textContent.trim()) {
         droppedNoise += 1;
         continue;
       }
-      messages.push(parsed);
+      messages.push(parsed.message);
+      degradedNodesCount += parsed.degradedNodesCount;
+      astNodeCount += parsed.astNodeCount;
     }
 
     return {
@@ -278,6 +325,8 @@ export class DeepSeekParser implements IParser {
       droppedNoise,
       droppedUnknownRole,
       messages,
+      degradedNodesCount,
+      astNodeCount,
     };
   }
 
@@ -307,17 +356,28 @@ export class DeepSeekParser implements IParser {
     return uniqueNodesInDocumentOrder(combinedCandidates);
   }
 
-  private parseMessageNode(node: Element): ParsedMessage | null {
+  private parseMessageNode(node: Element, perfMode: AstPerfMode): ParsedNodeResult | null {
     const role = this.inferRole(node);
     if (!role) return null;
 
     const contentEl = queryFirstWithin(node, SELECTORS.messageContent);
     const textContent = this.cleanExtractedText(safeTextContent(contentEl ?? node));
+    const ast = extractAstFromElement(contentEl ?? node, {
+      platform: "DeepSeek",
+      perfMode,
+    });
 
     return {
-      role,
-      textContent,
-      htmlContent: contentEl ? contentEl.innerHTML : undefined,
+      message: {
+        role,
+        textContent,
+        contentAst: ast.root,
+        contentAstVersion: ast.root ? "ast_v1" : null,
+        degradedNodesCount: ast.degradedNodesCount,
+        htmlContent: contentEl ? contentEl.innerHTML : undefined,
+      },
+      degradedNodesCount: ast.degradedNodesCount,
+      astNodeCount: ast.astNodeCount,
     };
   }
 

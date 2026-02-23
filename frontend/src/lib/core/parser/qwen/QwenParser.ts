@@ -9,6 +9,8 @@ import {
   safeTextContent,
   uniqueNodesInDocumentOrder,
 } from "../shared/selectorUtils";
+import { extractAstFromElement } from "../shared/astExtractor";
+import { astPerfModeController, type AstPerfMode } from "../shared/astPerfMode";
 import { logger } from "../../../utils/logger";
 
 const SELECTORS = {
@@ -162,7 +164,13 @@ interface ParserStats {
   droppedNoise: number;
   droppedUnknownRole: number;
   rootSelector: string;
-  durationMs: number;
+  parse_duration_ms: number;
+  perf_mode: AstPerfMode;
+  next_perf_mode: AstPerfMode;
+  degraded_nodes_count: number;
+  ast_node_count: number;
+  message_count: number;
+  platform: Platform;
 }
 
 interface ExtractionResult {
@@ -171,6 +179,14 @@ interface ExtractionResult {
   droppedNoise: number;
   droppedUnknownRole: number;
   messages: ParsedMessage[];
+  degradedNodesCount: number;
+  astNodeCount: number;
+}
+
+interface ParsedNodeResult {
+  message: ParsedMessage;
+  degradedNodesCount: number;
+  astNodeCount: number;
 }
 
 export class QwenParser implements IParser {
@@ -203,11 +219,14 @@ export class QwenParser implements IParser {
 
   getMessages(): ParsedMessage[] {
     const startedAt = performance.now();
+    const perfMode = astPerfModeController.getMode("Qwen");
     const rootContext = this.resolveConversationRoot();
-    const selectorResult = this.extractUsingSelectorStrategy(rootContext.root);
-    const anchorResult = this.extractUsingAnchorStrategy(rootContext.root);
+    const selectorResult = this.extractUsingSelectorStrategy(rootContext.root, perfMode);
+    const anchorResult = this.extractUsingAnchorStrategy(rootContext.root, perfMode);
     const chosen = this.chooseBestExtraction(selectorResult, anchorResult);
     const deduped = this.dedupeNearDuplicates(chosen.messages);
+    const parseDurationMs = Math.round(performance.now() - startedAt);
+    const modeUpdate = astPerfModeController.record("Qwen", parseDurationMs);
 
     const stats: ParserStats = {
       source: chosen.source,
@@ -217,8 +236,24 @@ export class QwenParser implements IParser {
       droppedNoise: chosen.droppedNoise + (chosen.messages.length - deduped.length),
       droppedUnknownRole: chosen.droppedUnknownRole,
       rootSelector: rootContext.selector,
-      durationMs: Math.round(performance.now() - startedAt),
+      parse_duration_ms: parseDurationMs,
+      perf_mode: perfMode,
+      next_perf_mode: modeUpdate.mode,
+      degraded_nodes_count: chosen.degradedNodesCount,
+      ast_node_count: chosen.astNodeCount,
+      message_count: deduped.length,
+      platform: "Qwen",
     };
+
+    if (modeUpdate.switched) {
+      logger.warn("parser", "Qwen AST perf mode switched", {
+        platform: "Qwen",
+        from: modeUpdate.previousMode,
+        to: modeUpdate.mode,
+        parse_duration_ms: parseDurationMs,
+        message_count: deduped.length,
+      });
+    }
 
     for (const message of deduped) {
       stats.roleDistribution[message.role] += 1;
@@ -259,7 +294,7 @@ export class QwenParser implements IParser {
     return extractEarliestTimeFromSelectors(SELECTORS.sourceTimes);
   }
 
-  private extractUsingSelectorStrategy(root: Element): ExtractionResult {
+  private extractUsingSelectorStrategy(root: Element, perfMode: AstPerfMode): ExtractionResult {
     const rawCandidates = this.collectMessageCandidates(root);
     const normalized = normalizeCandidateNodes(rawCandidates, {
       minTextLength: 2,
@@ -270,19 +305,23 @@ export class QwenParser implements IParser {
     const messages: ParsedMessage[] = [];
     let droppedUnknownRole = 0;
     let droppedNoise = normalized.droppedNoise;
+    let degradedNodesCount = 0;
+    let astNodeCount = 0;
 
     for (const node of normalized.nodes) {
-      const parsed = this.parseMessageNode(node);
+      const parsed = this.parseMessageNode(node, perfMode);
       if (!parsed) {
         droppedUnknownRole += 1;
         continue;
       }
-      if (!parsed.textContent.trim()) {
+      if (!parsed.message.textContent.trim()) {
         droppedNoise += 1;
         continue;
       }
 
-      messages.push(parsed);
+      messages.push(parsed.message);
+      degradedNodesCount += parsed.degradedNodesCount;
+      astNodeCount += parsed.astNodeCount;
     }
 
     return {
@@ -291,10 +330,12 @@ export class QwenParser implements IParser {
       droppedNoise,
       droppedUnknownRole,
       messages,
+      degradedNodesCount,
+      astNodeCount,
     };
   }
 
-  private extractUsingAnchorStrategy(root: Element): ExtractionResult {
+  private extractUsingAnchorStrategy(root: Element, perfMode: AstPerfMode): ExtractionResult {
     const anchors = this.queryAllUniqueWithin(root, SELECTORS.roleAnchors);
     if (anchors.length === 0) {
       return {
@@ -303,6 +344,8 @@ export class QwenParser implements IParser {
         droppedNoise: 0,
         droppedUnknownRole: 0,
         messages: [],
+        degradedNodesCount: 0,
+        astNodeCount: 0,
       };
     }
 
@@ -313,18 +356,22 @@ export class QwenParser implements IParser {
     const messages: ParsedMessage[] = [];
     let droppedNoise = 0;
     let droppedUnknownRole = 0;
+    let degradedNodesCount = 0;
+    let astNodeCount = 0;
 
     for (const node of resolved) {
-      const parsed = this.parseMessageNode(node);
+      const parsed = this.parseMessageNode(node, perfMode);
       if (!parsed) {
         droppedUnknownRole += 1;
         continue;
       }
-      if (!parsed.textContent.trim()) {
+      if (!parsed.message.textContent.trim()) {
         droppedNoise += 1;
         continue;
       }
-      messages.push(parsed);
+      messages.push(parsed.message);
+      degradedNodesCount += parsed.degradedNodesCount;
+      astNodeCount += parsed.astNodeCount;
     }
 
     return {
@@ -333,6 +380,8 @@ export class QwenParser implements IParser {
       droppedNoise,
       droppedUnknownRole,
       messages,
+      degradedNodesCount,
+      astNodeCount,
     };
   }
 
@@ -491,17 +540,28 @@ export class QwenParser implements IParser {
     return true;
   }
 
-  private parseMessageNode(node: Element): ParsedMessage | null {
+  private parseMessageNode(node: Element, perfMode: AstPerfMode): ParsedNodeResult | null {
     const role = this.inferRole(node);
     if (!role) return null;
 
     const contentEl = queryFirstWithin(node, SELECTORS.messageContent);
     const textContent = this.cleanExtractedText(safeTextContent(contentEl ?? node));
+    const ast = extractAstFromElement(contentEl ?? node, {
+      platform: "Qwen",
+      perfMode,
+    });
 
     return {
-      role,
-      textContent,
-      htmlContent: contentEl ? contentEl.innerHTML : undefined,
+      message: {
+        role,
+        textContent,
+        contentAst: ast.root,
+        contentAstVersion: ast.root ? "ast_v1" : null,
+        degradedNodesCount: ast.degradedNodesCount,
+        htmlContent: contentEl ? contentEl.innerHTML : undefined,
+      },
+      degradedNodesCount: ast.degradedNodesCount,
+      astNodeCount: ast.astNodeCount,
     };
   }
 
