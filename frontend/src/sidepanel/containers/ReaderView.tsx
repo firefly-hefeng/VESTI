@@ -38,33 +38,33 @@ export function ReaderView({ conversation, onBack, refreshToken }: ReaderViewPro
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border-subtle bg-bg-primary px-4">
+      <header className="reader-view-header">
         <button
           type="button"
           aria-label="Back"
           onClick={onBack}
-            className="flex h-7 w-7 items-center justify-center rounded-sm text-text-secondary transition-colors [transition-duration:120ms] hover:bg-accent-primary-light hover:text-accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          className="reader-view-back-btn"
         >
-          <ArrowLeft className="h-5 w-5" strokeWidth={1.75} />
+          <ArrowLeft className="reader-view-back-icon" strokeWidth={1.75} />
         </button>
 
-        <h2 className="min-w-0 flex-1 truncate text-vesti-base font-semibold text-text-primary tracking-tight">
+        <h2 className="reader-view-title min-w-0 flex-1 truncate text-vesti-base font-semibold text-text-primary">
           {conversation.title}
         </h2>
 
         <PlatformTag platform={conversation.platform} />
 
-        <span className="flex items-center gap-1 text-vesti-xs text-text-tertiary">
-          <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <span className="reader-view-msg-count text-vesti-xs text-text-tertiary">
+          <MessageSquare className="reader-view-msg-icon" strokeWidth={1.75} />
           {conversation.message_count} messages
         </span>
       </header>
 
       <div className="flex-1 overflow-y-auto vesti-scroll">
         {loading ? (
-          <div className="flex flex-col gap-4 p-4">
+          <div className="reader-view-loading">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="space-y-2">
+              <div key={i} className="reader-view-loading-item">
                 <div className="h-3 w-12 animate-pulse rounded bg-surface-card" />
                 <div className="h-20 animate-pulse rounded-md bg-surface-card" />
               </div>
@@ -75,7 +75,7 @@ export function ReaderView({ conversation, onBack, refreshToken }: ReaderViewPro
             <p className="text-vesti-sm text-text-tertiary">No messages yet</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-4 p-4">
+          <div className="flex flex-col pb-2">
             {messages.map((msg) => (
               <MessageBubble
                 key={msg.id}

@@ -30,6 +30,16 @@ const SKIP_TAGS = new Set([
   "iframe",
 ]);
 
+const LANGUAGE_TOKEN_PATTERN = /^[a-z0-9+#.-]{1,24}$/i;
+const LANGUAGE_NOISE_TOKENS = new Set([
+  "copy",
+  "copied",
+  "code",
+  "plain",
+  "plaintext",
+  "text",
+]);
+
 export interface AstExtractionOptions {
   platform: Platform;
   perfMode: AstPerfMode;
@@ -129,6 +139,62 @@ function parseLanguageFromClassName(value: string): string | null {
   return null;
 }
 
+function normalizeLanguageToken(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const prefixed = normalized.match(/^(?:language|lang)[:_\-\s]*([a-z0-9+#.-]{1,24})$/i);
+  if (prefixed?.[1]) {
+    const token = prefixed[1].toLowerCase();
+    return LANGUAGE_NOISE_TOKENS.has(token) ? null : token;
+  }
+
+  if (!LANGUAGE_TOKEN_PATTERN.test(normalized)) {
+    return null;
+  }
+
+  if (LANGUAGE_NOISE_TOKENS.has(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function collectLanguageHintFromElement(element: Element): string | null {
+  const attrCandidates = [
+    element.getAttribute("data-language"),
+    element.getAttribute("data-lang"),
+    element.getAttribute("aria-label"),
+    element.getAttribute("title"),
+  ];
+
+  for (const candidate of attrCandidates) {
+    const token = normalizeLanguageToken(candidate);
+    if (token) return token;
+  }
+
+  const className = element.className?.toString() ?? "";
+  const classLanguage = parseLanguageFromClassName(className);
+  if (classLanguage) {
+    const token = normalizeLanguageToken(classLanguage);
+    if (token) return token;
+  }
+
+  const textHint = normalizeInlineText(element.textContent ?? "").trim();
+  if (
+    element.children.length === 0 &&
+    textHint.length > 0 &&
+    textHint.length <= 24 &&
+    !textHint.includes(" ")
+  ) {
+    const token = normalizeLanguageToken(textHint);
+    if (token) return token;
+  }
+
+  return null;
+}
+
 function inferCodeLanguage(preEl: Element, codeEl: Element | null): string | null {
   const attrCandidates = [
     codeEl?.getAttribute("data-language"),
@@ -138,18 +204,115 @@ function inferCodeLanguage(preEl: Element, codeEl: Element | null): string | nul
   ];
 
   for (const candidate of attrCandidates) {
-    if (candidate && candidate.trim().length > 0) {
-      return candidate.trim();
-    }
+    const token = normalizeLanguageToken(candidate);
+    if (token) return token;
   }
 
   const classCandidates = [codeEl?.className?.toString() ?? "", preEl.className?.toString() ?? ""];
   for (const candidate of classCandidates) {
     const language = parseLanguageFromClassName(candidate);
-    if (language) return language;
+    const token = normalizeLanguageToken(language);
+    if (token) return token;
+  }
+
+  const nearby = new Set<Element>();
+  const parent = preEl.parentElement;
+  if (parent) {
+    nearby.add(parent);
+    if (parent.previousElementSibling) nearby.add(parent.previousElementSibling);
+    if (parent.nextElementSibling) nearby.add(parent.nextElementSibling);
+    for (const child of Array.from(parent.children)) {
+      if (child !== preEl && child !== codeEl) {
+        nearby.add(child);
+      }
+    }
+  }
+
+  const wrapper =
+    preEl.closest("figure, [class*='code'], [class*='Code'], [data-language], [data-lang]") ??
+    codeEl?.closest("figure, [class*='code'], [class*='Code'], [data-language], [data-lang]");
+  if (wrapper) {
+    nearby.add(wrapper);
+    for (const child of Array.from(wrapper.children)) {
+      if (child !== preEl && child !== codeEl) {
+        nearby.add(child);
+      }
+    }
+  }
+
+  for (const element of nearby) {
+    const token = collectLanguageHintFromElement(element);
+    if (token) return token;
   }
 
   return null;
+}
+
+function getLanguageLeakToken(node: AstNode): string | null {
+  if (node.type === "text") {
+    return normalizeLanguageToken(node.text);
+  }
+
+  if (node.type !== "p") {
+    return null;
+  }
+
+  const value = node.children
+    .map((child) => {
+      if (child.type === "text") return child.text;
+      if (child.type === "br") return " ";
+      if (child.type === "strong" || child.type === "em" || child.type === "fragment") {
+        return child.children
+          .map((nested) => (nested.type === "text" ? nested.text : ""))
+          .join(" ");
+      }
+      return "";
+    })
+    .join(" ");
+
+  return normalizeLanguageToken(normalizeInlineText(value).trim());
+}
+
+function sanitizeLanguageLeakageInNodes(nodes: AstNode[]): AstNode[] {
+  const sanitized = nodes.map((node) => {
+    if (
+      node.type === "fragment" ||
+      node.type === "p" ||
+      node.type === "h1" ||
+      node.type === "h2" ||
+      node.type === "h3" ||
+      node.type === "ul" ||
+      node.type === "ol" ||
+      node.type === "li" ||
+      node.type === "strong" ||
+      node.type === "em" ||
+      node.type === "blockquote"
+    ) {
+      return {
+        ...node,
+        children: sanitizeLanguageLeakageInNodes(node.children),
+      };
+    }
+    return node;
+  });
+
+  const result: AstNode[] = [];
+  for (let i = 0; i < sanitized.length; i += 1) {
+    const current = sanitized[i];
+    const next = sanitized[i + 1];
+
+    if (next?.type === "code_block") {
+      const codeLanguage = normalizeLanguageToken(next.language ?? null);
+      const leakToken = current ? getLanguageLeakToken(current) : null;
+      if (codeLanguage && leakToken && leakToken === codeLanguage) {
+        continue;
+      }
+    }
+
+    result.push(current);
+  }
+
+  return result;
 }
 
 class AstExtractor {
@@ -171,11 +334,12 @@ class AstExtractor {
     }
 
     const compacted = compactNodes(children);
+    const cleaned = sanitizeLanguageLeakageInNodes(compacted);
     const root: AstRoot | null =
-      compacted.length > 0
+      cleaned.length > 0
         ? {
             type: "root",
-            children: compacted,
+            children: cleaned,
           }
         : null;
 

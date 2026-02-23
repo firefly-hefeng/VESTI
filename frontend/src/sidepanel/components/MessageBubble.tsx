@@ -1,10 +1,23 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Copy, Check, ChevronDown } from "lucide-react";
 import type { Message, Platform } from "~lib/types";
 import type { AstNode, AstRoot } from "~lib/types/ast";
 import { AstMessageRenderer } from "./AstMessageRenderer";
+import { PLATFORM_TONE } from "./platformTone";
 
-const COLLAPSE_THRESHOLD = 500;
+const COLLAPSE_THRESHOLD_PX = 110;
+const COLLAPSED_MAX_HEIGHT_PX = 86;
+const COLLAPSE_FADE_HEIGHT_PX = 37;
+const COPY_FEEDBACK_MS = 1400;
+const FENCE_LANGUAGE_PATTERN = /^[a-z0-9+#.-]{1,24}$/i;
+const FENCE_LANGUAGE_NOISE_TOKENS = new Set([
+  "copy",
+  "copied",
+  "code",
+  "plain",
+  "plaintext",
+  "text",
+]);
 const GEMINI_USER_PREFIX_PATTERN = /^[\s\u200B\uFEFF]*you said(?:\s*[:\-])?\s*/i;
 const MIN_AST_COVERAGE_RATIO = 0.55;
 const MIN_TEXT_LENGTH_FOR_AST_CHECK = 120;
@@ -18,6 +31,10 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, platform }: MessageBubbleProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [canCollapse, setCanCollapse] = useState(false);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
+
   const renderAst = useMemo(() => {
     if (!message.content_ast || message.content_ast.type !== "root") {
       return null;
@@ -40,9 +57,6 @@ export function MessageBubble({ message, platform }: MessageBubbleProps) {
   const astCoverageRatio =
     sourceTextLen > 0 ? astTextLen / sourceTextLen : 1;
 
-  const isLong =
-    platform !== "Claude" && message.content_text.length > COLLAPSE_THRESHOLD;
-  const shouldCollapse = isLong && !isExpanded;
   const isAi = message.role === "ai";
   const hasRenderableAst =
     message.content_ast_version === "ast_v1" &&
@@ -53,65 +67,132 @@ export function MessageBubble({ message, platform }: MessageBubbleProps) {
     hasRenderableAst &&
     (sourceTextLen < MIN_TEXT_LENGTH_FOR_AST_CHECK ||
       astCoverageRatio >= resolveCoverageFloor(platform, astStats));
+  const shouldCollapse = canCollapse && !isExpanded;
+
+  useLayoutEffect(() => {
+    const bodyEl = bodyRef.current;
+    if (!bodyEl) {
+      setCanCollapse(false);
+      return;
+    }
+
+    let frameId = 0;
+    const measure = () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        const nextCanCollapse = bodyEl.scrollHeight > COLLAPSE_THRESHOLD_PX;
+        setCanCollapse((prev) => (prev === nextCanCollapse ? prev : nextCanCollapse));
+      });
+    };
+
+    measure();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        measure();
+      });
+      observer.observe(bodyEl);
+    }
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      observer?.disconnect();
+    };
+  }, [message.id, message.content_text, renderAst, shouldUseAst]);
+
+  useEffect(() => {
+    if (!canCollapse) {
+      setIsExpanded(false);
+    }
+  }, [canCollapse]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content_text).catch(() => {});
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copyTimerRef.current = null;
+    }, COPY_FEEDBACK_MS);
   };
 
   return (
-    <div className="group relative">
-      <span className="mb-1 block text-vesti-xs font-medium text-text-tertiary">
-        {isAi ? platform : "You"}
-      </span>
+    <div className={`reader-turn ${isAi ? "reader-turn-ai" : "reader-turn-user"}`}>
+      <div className="reader-turn-header">
+        <span
+          className={`reader-role-label ${
+            isAi
+              ? `reader-role-label-model ${PLATFORM_TONE[platform].text}`
+              : "reader-role-label-user"
+          }`}
+        >
+          {isAi ? platform : "You"}
+        </span>
 
-      <div
-        className={`relative rounded-md px-3 py-3 ${
-          isAi ? "bg-surface-ai-message" : ""
-        }`}
-      >
         <button
           type="button"
           aria-label="Copy message"
           onClick={handleCopy}
-          className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-sm text-text-tertiary opacity-0 pointer-events-none transition-[opacity,colors] [transition-duration:120ms] hover:bg-accent-primary-light hover:text-accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+          className="reader-turn-copy-btn"
         >
           {copied ? (
-            <Check className="h-3.5 w-3.5 text-success" strokeWidth={1.75} />
+            <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
           ) : (
             <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />
           )}
         </button>
+      </div>
 
+      <div
+        className={`reader-turn-body-wrap ${shouldCollapse ? "is-collapsed" : ""} ${canCollapse ? "with-expand" : ""}`}
+        style={shouldCollapse ? { maxHeight: `${COLLAPSED_MAX_HEIGHT_PX}px` } : undefined}
+      >
         <div
-          className={`relative transition-[max-height] duration-300 ease-in-out overflow-hidden ${
-            shouldCollapse ? "max-h-[200px]" : "max-h-[100000px]"
-          }`}
+          ref={bodyRef}
+          className={`reader-turn-body ${isAi ? "reader-turn-body-model" : "reader-turn-body-user"}`}
         >
-          <div className="text-vesti-lg leading-[1.7] text-text-primary font-serif">
-            {shouldUseAst ? (
-              <AstMessageRenderer root={renderAst as AstRoot} />
-            ) : (
-              <div className="whitespace-pre-wrap">{renderContent(message.content_text)}</div>
-            )}
-          </div>
-
-          {shouldCollapse && (
-            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[60px] bg-gradient-to-t from-bg-tertiary to-transparent" />
+          {shouldUseAst ? (
+            <AstMessageRenderer root={renderAst as AstRoot} />
+          ) : (
+            <div className="reader-fallback-content whitespace-pre-wrap">
+              {renderContent(message.content_text)}
+            </div>
           )}
         </div>
+        {shouldCollapse ? (
+          <div
+            className="reader-turn-fade-mask"
+            style={{ height: `${COLLAPSE_FADE_HEIGHT_PX}px` }}
+          />
+        ) : null}
+      </div>
 
-        {isLong && !isExpanded && (
+      <div className={`reader-expand-row ${canCollapse ? "has-btn" : ""}`}>
+        {canCollapse ? (
           <button
             type="button"
-            onClick={() => setIsExpanded(true)}
-            className="mt-1 flex items-center gap-1 text-vesti-sm font-medium text-accent-primary transition-colors [transition-duration:120ms] hover:text-accent-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className={`reader-expand-btn ${isExpanded ? "open" : ""}`}
           >
-            Expand
+            {isExpanded ? "Collapse" : "Expand"}
             <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -127,6 +208,7 @@ interface AstRenderStats {
   hasTable: boolean;
   hasCodeBlock: boolean;
   hasMath: boolean;
+  hasBlockquote: boolean;
 }
 
 function inspectAst(root: AstRoot): AstRenderStats {
@@ -136,6 +218,7 @@ function inspectAst(root: AstRoot): AstRenderStats {
     hasTable: false,
     hasCodeBlock: false,
     hasMath: false,
+    hasBlockquote: false,
   };
 
   const walk = (node: AstNode): void => {
@@ -160,6 +243,7 @@ function inspectAst(root: AstRoot): AstRenderStats {
     if (node.type === "table") stats.hasTable = true;
     if (node.type === "code_block") stats.hasCodeBlock = true;
     if (node.type === "math") stats.hasMath = true;
+    if (node.type === "blockquote") stats.hasBlockquote = true;
 
     if (
       node.type === "fragment" ||
@@ -188,6 +272,10 @@ function resolveCoverageFloor(
 ): number {
   if (!stats) {
     return MIN_AST_COVERAGE_RATIO;
+  }
+
+  if (stats.hasBlockquote) {
+    return CLAUDE_RICH_AST_COVERAGE_FLOOR;
   }
 
   const richClaudeAst =
@@ -249,27 +337,106 @@ function renderContent(text: string): React.ReactNode {
   const parts = text.split(/(```[\s\S]*?```|\*\*.*?\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith("```") && part.endsWith("```")) {
-      const code = part.slice(3, -3);
-      const firstNewline = code.indexOf("\n");
-      const codeBody = firstNewline > -1 ? code.slice(firstNewline + 1) : code;
-      return (
-        <pre
-          key={i}
-          className="my-2 overflow-x-auto rounded-sm bg-surface-ai-message p-3 font-mono text-[13px] leading-[1.85] text-text-primary"
-        >
-          <code>{codeBody}</code>
-        </pre>
-      );
+      const { code, language } = parseFallbackFencedCode(part);
+      return <FallbackCodeBlockView key={i} code={code} language={language} />;
     }
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
-        <strong key={i} className="font-semibold">
+        <strong key={i}>
           {part.slice(2, -2)}
         </strong>
       );
     }
     return <span key={i}>{part}</span>;
   });
+}
+
+interface FallbackCodeBlockViewProps {
+  code: string;
+  language: string;
+}
+
+function FallbackCodeBlockView({ code, language }: FallbackCodeBlockViewProps) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code).catch(() => {});
+    setCopied(true);
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+    }
+    timerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      timerRef.current = null;
+    }, COPY_FEEDBACK_MS);
+  };
+
+  return (
+    <div className="reader-ast-code-block">
+      <div className="reader-ast-code-head">
+        <span className="reader-ast-code-lang">{language}</span>
+        <button
+          type="button"
+          className="reader-ast-code-copy"
+          onClick={handleCopy}
+          aria-label="Copy code"
+        >
+          {copied ? <Check className="h-3 w-3" strokeWidth={1.75} /> : <Copy className="h-3 w-3" strokeWidth={1.75} />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre className="reader-ast-code-pre">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+function parseFallbackFencedCode(part: string): { code: string; language: string } {
+  const raw = part.slice(3, -3).replace(/^\r?\n/, "");
+  const normalized = raw.replace(/\r\n?/g, "\n").trimEnd();
+  const firstNewline = normalized.indexOf("\n");
+
+  if (firstNewline < 0) {
+    return {
+      code: normalized,
+      language: "plain",
+    };
+  }
+
+  const maybeLanguage = normalizeFenceLanguage(normalized.slice(0, firstNewline));
+  if (!maybeLanguage) {
+    return {
+      code: normalized,
+      language: "plain",
+    };
+  }
+
+  return {
+    code: normalized.slice(firstNewline + 1),
+    language: maybeLanguage,
+  };
+}
+
+function normalizeFenceLanguage(value: string): string | null {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const prefixed = normalized.match(/^(?:language|lang)[:_\-\s]*([a-z0-9+#.-]{1,24})$/i);
+  const token = (prefixed?.[1] ?? normalized).toLowerCase();
+  if (!FENCE_LANGUAGE_PATTERN.test(token) || FENCE_LANGUAGE_NOISE_TOKENS.has(token)) {
+    return null;
+  }
+  return token;
 }
 
 function sanitizeAstForRender(
