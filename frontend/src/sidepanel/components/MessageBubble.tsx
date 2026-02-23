@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Copy, Check, ChevronDown } from "lucide-react";
 import type { Message, Platform } from "~lib/types";
-import type { AstRoot } from "~lib/types/ast";
+import type { AstNode, AstRoot } from "~lib/types/ast";
 import { AstMessageRenderer } from "./AstMessageRenderer";
 
 const COLLAPSE_THRESHOLD = 500;
+const GEMINI_USER_PREFIX_PATTERN = /^[\s\u200B\uFEFF]*you said(?:\s*[:\-])?\s*/i;
 
 interface MessageBubbleProps {
   message: Message;
@@ -14,15 +15,21 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, platform }: MessageBubbleProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const renderAst = useMemo(() => {
+    if (!message.content_ast || message.content_ast.type !== "root") {
+      return null;
+    }
+    return sanitizeAstForRender(message.content_ast, message.role, platform);
+  }, [message.content_ast, message.role, platform]);
 
   const isLong = message.content_text.length > COLLAPSE_THRESHOLD;
   const shouldCollapse = isLong && !isExpanded;
   const isAi = message.role === "ai";
   const hasAst =
     message.content_ast_version === "ast_v1" &&
-    !!message.content_ast &&
-    message.content_ast.type === "root" &&
-    message.content_ast.children.length > 0;
+    !!renderAst &&
+    renderAst.type === "root" &&
+    renderAst.children.length > 0;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content_text).catch(() => {});
@@ -61,7 +68,7 @@ export function MessageBubble({ message, platform }: MessageBubbleProps) {
         >
           <div className="text-vesti-lg leading-[1.7] text-text-primary font-serif">
             {hasAst ? (
-              <AstMessageRenderer root={message.content_ast as AstRoot} />
+              <AstMessageRenderer root={renderAst as AstRoot} />
             ) : (
               <div className="whitespace-pre-wrap">{renderContent(message.content_text)}</div>
             )}
@@ -112,4 +119,74 @@ function renderContent(text: string): React.ReactNode {
     }
     return <span key={i}>{part}</span>;
   });
+}
+
+function sanitizeAstForRender(
+  root: AstRoot,
+  role: Message["role"],
+  platform: Platform,
+): AstRoot {
+  if (role !== "user" || platform !== "Gemini") {
+    return root;
+  }
+
+  const cloned = JSON.parse(JSON.stringify(root)) as AstRoot;
+  stripLeadingGeminiPrefix(cloned.children);
+  return cloned;
+}
+
+function stripLeadingGeminiPrefix(nodes: AstNode[]): boolean {
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (!node) continue;
+
+    if (node.type === "text") {
+      const stripped = node.text.replace(GEMINI_USER_PREFIX_PATTERN, "");
+      if (stripped !== node.text) {
+        if (stripped.trim().length === 0) {
+          nodes.splice(index, 1);
+        } else {
+          node.text = stripped;
+        }
+        return true;
+      }
+
+      if (node.text.trim().length === 0) {
+        nodes.splice(index, 1);
+        index -= 1;
+        continue;
+      }
+      return false;
+    }
+
+    if (node.type === "br") {
+      continue;
+    }
+
+    if (
+      node.type === "fragment" ||
+      node.type === "p" ||
+      node.type === "h1" ||
+      node.type === "h2" ||
+      node.type === "h3" ||
+      node.type === "ul" ||
+      node.type === "ol" ||
+      node.type === "li" ||
+      node.type === "strong" ||
+      node.type === "em" ||
+      node.type === "blockquote"
+    ) {
+      const changed = stripLeadingGeminiPrefix(node.children);
+      if (node.children.length === 0) {
+        nodes.splice(index, 1);
+        index -= 1;
+        continue;
+      }
+      return changed;
+    }
+
+    return false;
+  }
+
+  return false;
 }

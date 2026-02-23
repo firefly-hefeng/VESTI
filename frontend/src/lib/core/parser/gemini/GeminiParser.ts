@@ -93,6 +93,7 @@ const SESSION_ID_PATTERNS = [
 const INVALID_SESSION_IDS = new Set(["app", "new", "chat", "conversation"]);
 const INVALID_GENERIC_TITLES = new Set(["chats", "gemini", "google gemini"]);
 const MAX_FALLBACK_TITLE_LENGTH = 120;
+const GEMINI_USER_PREFIX_PATTERN = /^[\s\u200B\uFEFF]*you said(?:\s*[:\-])?\s*/i;
 const TITLE_BOUNDARY_CHARS = ["\n", "。", "？", "!", "！", "?"];
 
 type MessageRole = "user" | "ai";
@@ -449,7 +450,7 @@ export class GeminiParser implements IParser {
   }
 
   private stripUserLabelPrefix(rawText: string): string {
-    return rawText.replace(/^you said\s+/i, "").trim();
+    return rawText.replace(GEMINI_USER_PREFIX_PATTERN, "").trim();
   }
 
   private sanitizeUserAstPrefix(root: AstRoot | null, role: MessageRole): AstRoot | null {
@@ -467,7 +468,7 @@ export class GeminiParser implements IParser {
       if (!node) continue;
 
       if (node.type === "text") {
-        const stripped = node.text.replace(/^you said\s+/i, "");
+        const stripped = node.text.replace(GEMINI_USER_PREFIX_PATTERN, "");
         if (stripped !== node.text) {
           if (stripped.trim().length === 0) {
             nodes.splice(index, 1);
