@@ -1,5 +1,6 @@
 import type { IParser, ParsedMessage } from "../IParser";
 import type { Platform } from "../../../types";
+import type { AstNode, AstRoot } from "../../../types/ast";
 import {
   extractEarliestTimeFromSelectors,
   normalizeCandidateNodes,
@@ -358,22 +359,23 @@ export class GeminiParser implements IParser {
     const rawText = this.cleanExtractedText(safeTextContent(contentEl ?? node));
     const textContent =
       role === "user" ? this.stripUserLabelPrefix(rawText) : rawText;
-    const ast = extractAstFromElement(contentEl ?? node, {
+    const astResult = extractAstFromElement(contentEl ?? node, {
       platform: "Gemini",
       perfMode,
     });
+    const contentAst = this.sanitizeUserAstPrefix(astResult.root, role);
 
     return {
       message: {
         role,
         textContent,
-        contentAst: ast.root,
-        contentAstVersion: ast.root ? "ast_v1" : null,
-        degradedNodesCount: ast.degradedNodesCount,
+        contentAst,
+        contentAstVersion: contentAst ? "ast_v1" : null,
+        degradedNodesCount: astResult.degradedNodesCount,
         htmlContent: contentEl ? contentEl.innerHTML : undefined,
       },
-      degradedNodesCount: ast.degradedNodesCount,
-      astNodeCount: ast.astNodeCount,
+      degradedNodesCount: astResult.degradedNodesCount,
+      astNodeCount: astResult.astNodeCount,
     };
   }
 
@@ -448,6 +450,71 @@ export class GeminiParser implements IParser {
 
   private stripUserLabelPrefix(rawText: string): string {
     return rawText.replace(/^you said\s+/i, "").trim();
+  }
+
+  private sanitizeUserAstPrefix(root: AstRoot | null, role: MessageRole): AstRoot | null {
+    if (!root || role !== "user") {
+      return root;
+    }
+
+    this.stripLeadingYouSaid(root.children);
+    return root.children.length > 0 ? root : null;
+  }
+
+  private stripLeadingYouSaid(nodes: AstNode[]): boolean {
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index];
+      if (!node) continue;
+
+      if (node.type === "text") {
+        const stripped = node.text.replace(/^you said\s+/i, "");
+        if (stripped !== node.text) {
+          if (stripped.trim().length === 0) {
+            nodes.splice(index, 1);
+          } else {
+            node.text = stripped;
+          }
+          return true;
+        }
+
+        if (node.text.trim().length === 0) {
+          nodes.splice(index, 1);
+          index -= 1;
+          continue;
+        }
+        return false;
+      }
+
+      if (node.type === "br") {
+        continue;
+      }
+
+      if (
+        node.type === "fragment" ||
+        node.type === "p" ||
+        node.type === "h1" ||
+        node.type === "h2" ||
+        node.type === "h3" ||
+        node.type === "ul" ||
+        node.type === "ol" ||
+        node.type === "li" ||
+        node.type === "strong" ||
+        node.type === "em" ||
+        node.type === "blockquote"
+      ) {
+        const changed = this.stripLeadingYouSaid(node.children);
+        if (node.children.length === 0) {
+          nodes.splice(index, 1);
+          index -= 1;
+          continue;
+        }
+        return changed;
+      }
+
+      return false;
+    }
+
+    return false;
   }
 
   private normalizeTitleCandidate(rawTitle: string): string {
