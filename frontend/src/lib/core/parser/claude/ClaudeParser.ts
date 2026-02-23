@@ -51,9 +51,15 @@ const SELECTORS = {
     "[data-testid='user-message']",
     ".markdown",
     ".prose",
+    "[class*='font-claude-response-body']",
     "div[class*='whitespace-pre-wrap']",
     "div[class*='font-claude-message']",
     "div[class*='font-user-message']",
+  ],
+  aiContentLeaves: [
+    "[class*='font-claude-response-body']",
+    "[data-testid*='assistant-message'] .markdown",
+    "[data-testid*='assistant-message'] .prose",
   ],
   title: ["nav h1", "h1", "title"],
   generating: [
@@ -254,11 +260,7 @@ export class ClaudeParser implements IParser {
         continue;
       }
 
-      const contentEl =
-        role === "user"
-          ? queryFirstWithin(block, SELECTORS.userPrimaryNodes) ||
-            queryFirstWithin(block, SELECTORS.messageContent)
-          : queryFirstWithin(block, SELECTORS.messageContent);
+      const contentEl = this.resolveContentElement(block, role);
 
       const parsed = this.buildParsedNode(
         role,
@@ -523,7 +525,7 @@ export class ClaudeParser implements IParser {
       return null;
     }
 
-    const contentEl = queryFirstWithin(node, SELECTORS.messageContent);
+    const contentEl = this.resolveContentElement(node, role);
 
     return this.buildParsedNode(
       role,
@@ -560,11 +562,49 @@ export class ClaudeParser implements IParser {
     };
   }
 
+  private resolveContentElement(node: Element, role: MessageRole): Element | null {
+    if (role === "user") {
+      return (
+        queryFirstWithin(node, SELECTORS.userPrimaryNodes) ||
+        queryFirstWithin(node, SELECTORS.messageContent)
+      );
+    }
+
+    const aiLeafNodes = queryAllWithinUnique(node, SELECTORS.aiContentLeaves);
+    if (aiLeafNodes.length > 1) {
+      return this.findSharedContentContainer(aiLeafNodes, node) ?? node;
+    }
+    if (aiLeafNodes.length === 1) {
+      return aiLeafNodes[0];
+    }
+
+    return queryFirstWithin(node, SELECTORS.messageContent);
+  }
+
+  private findSharedContentContainer(nodes: Element[], boundary: Element): Element | null {
+    const first = nodes[0];
+    if (!first) return null;
+
+    let current: Element | null = first;
+    while (current && boundary.contains(current)) {
+      const containsAll = nodes.every((node) => current?.contains(node));
+      if (containsAll) {
+        if (!SELECTORS.noiseContainers.some((selector) => current?.matches(selector))) {
+          return current;
+        }
+      }
+
+      if (current === boundary) {
+        break;
+      }
+      current = current.parentElement;
+    }
+
+    return boundary;
+  }
+
   private extractMessageText(node: Element, role: MessageRole): string {
-    const contentNode =
-      role === "user"
-        ? queryFirstWithin(node, SELECTORS.userPrimaryNodes) || queryFirstWithin(node, SELECTORS.messageContent)
-        : queryFirstWithin(node, SELECTORS.messageContent);
+    const contentNode = this.resolveContentElement(node, role);
 
     const rawText = safeTextContent(contentNode ?? node);
     return this.cleanExtractedText(rawText);
@@ -668,7 +708,9 @@ export class ClaudeParser implements IParser {
     text = text.replace(/^Show more\s*Done\s*/i, "");
 
     text = text
-      .replace(/\s+/g, " ")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t\f\v]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
       .replace(/^(Copy|Edit|Retry)\s+/i, "")
       .trim();
 

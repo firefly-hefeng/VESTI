@@ -6,6 +6,9 @@ import { AstMessageRenderer } from "./AstMessageRenderer";
 
 const COLLAPSE_THRESHOLD = 500;
 const GEMINI_USER_PREFIX_PATTERN = /^[\s\u200B\uFEFF]*you said(?:\s*[:\-])?\s*/i;
+const MIN_AST_COVERAGE_RATIO = 0.55;
+const MIN_TEXT_LENGTH_FOR_AST_CHECK = 120;
+const CLAUDE_RICH_AST_COVERAGE_FLOOR = 0.22;
 
 interface MessageBubbleProps {
   message: Message;
@@ -22,14 +25,34 @@ export function MessageBubble({ message, platform }: MessageBubbleProps) {
     return sanitizeAstForRender(message.content_ast, message.role, platform);
   }, [message.content_ast, message.role, platform]);
 
-  const isLong = message.content_text.length > COLLAPSE_THRESHOLD;
+  const sourceTextLen = useMemo(
+    () => normalizeForCoverage(message.content_text).length,
+    [message.content_text],
+  );
+  const astTextLen = useMemo(
+    () => (renderAst ? normalizeForCoverage(extractAstPlainText(renderAst)).length : 0),
+    [renderAst],
+  );
+  const astStats = useMemo(
+    () => (renderAst ? inspectAst(renderAst) : null),
+    [renderAst],
+  );
+  const astCoverageRatio =
+    sourceTextLen > 0 ? astTextLen / sourceTextLen : 1;
+
+  const isLong =
+    platform !== "Claude" && message.content_text.length > COLLAPSE_THRESHOLD;
   const shouldCollapse = isLong && !isExpanded;
   const isAi = message.role === "ai";
-  const hasAst =
+  const hasRenderableAst =
     message.content_ast_version === "ast_v1" &&
     !!renderAst &&
     renderAst.type === "root" &&
     renderAst.children.length > 0;
+  const shouldUseAst =
+    hasRenderableAst &&
+    (sourceTextLen < MIN_TEXT_LENGTH_FOR_AST_CHECK ||
+      astCoverageRatio >= resolveCoverageFloor(platform, astStats));
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content_text).catch(() => {});
@@ -67,7 +90,7 @@ export function MessageBubble({ message, platform }: MessageBubbleProps) {
           }`}
         >
           <div className="text-vesti-lg leading-[1.7] text-text-primary font-serif">
-            {hasAst ? (
+            {shouldUseAst ? (
               <AstMessageRenderer root={renderAst as AstRoot} />
             ) : (
               <div className="whitespace-pre-wrap">{renderContent(message.content_text)}</div>
@@ -92,6 +115,134 @@ export function MessageBubble({ message, platform }: MessageBubbleProps) {
       </div>
     </div>
   );
+}
+
+function normalizeForCoverage(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+interface AstRenderStats {
+  blockNodes: number;
+  hasList: boolean;
+  hasTable: boolean;
+  hasCodeBlock: boolean;
+  hasMath: boolean;
+}
+
+function inspectAst(root: AstRoot): AstRenderStats {
+  const stats: AstRenderStats = {
+    blockNodes: 0,
+    hasList: false,
+    hasTable: false,
+    hasCodeBlock: false,
+    hasMath: false,
+  };
+
+  const walk = (node: AstNode): void => {
+    switch (node.type) {
+      case "p":
+      case "h1":
+      case "h2":
+      case "h3":
+      case "blockquote":
+      case "code_block":
+      case "table":
+      case "ul":
+      case "ol":
+      case "li":
+        stats.blockNodes += 1;
+        break;
+      default:
+        break;
+    }
+
+    if (node.type === "ul" || node.type === "ol") stats.hasList = true;
+    if (node.type === "table") stats.hasTable = true;
+    if (node.type === "code_block") stats.hasCodeBlock = true;
+    if (node.type === "math") stats.hasMath = true;
+
+    if (
+      node.type === "fragment" ||
+      node.type === "p" ||
+      node.type === "h1" ||
+      node.type === "h2" ||
+      node.type === "h3" ||
+      node.type === "ul" ||
+      node.type === "ol" ||
+      node.type === "li" ||
+      node.type === "strong" ||
+      node.type === "em" ||
+      node.type === "blockquote"
+    ) {
+      node.children.forEach(walk);
+    }
+  };
+
+  root.children.forEach(walk);
+  return stats;
+}
+
+function resolveCoverageFloor(
+  platform: Platform,
+  stats: AstRenderStats | null,
+): number {
+  if (!stats) {
+    return MIN_AST_COVERAGE_RATIO;
+  }
+
+  const richClaudeAst =
+    platform === "Claude" &&
+    (
+      stats.hasTable ||
+      stats.hasList ||
+      stats.hasCodeBlock ||
+      (stats.hasMath && stats.blockNodes >= 2) ||
+      stats.blockNodes >= 4
+    );
+
+  return richClaudeAst ? CLAUDE_RICH_AST_COVERAGE_FLOOR : MIN_AST_COVERAGE_RATIO;
+}
+
+function extractAstPlainText(root: AstRoot): string {
+  return root.children.map(extractAstNodeText).join(" ");
+}
+
+function extractAstNodeText(node: AstNode): string {
+  switch (node.type) {
+    case "text":
+      return node.text;
+    case "fragment":
+    case "p":
+    case "h1":
+    case "h2":
+    case "h3":
+    case "ul":
+    case "ol":
+    case "li":
+    case "strong":
+    case "em":
+    case "blockquote":
+      return node.children.map(extractAstNodeText).join(" ");
+    case "br":
+      return "\n";
+    case "code_inline":
+      return node.text;
+    case "code_block":
+      return node.code;
+    case "table": {
+      const headerText = node.headers.join(" ");
+      const rowText = node.rows.map((row) => row.join(" ")).join(" ");
+      return `${headerText} ${rowText}`;
+    }
+    case "math":
+      return node.tex;
+    case "attachment":
+      return node.name;
+    default: {
+      const exhaustiveGuard: never = node;
+      return exhaustiveGuard;
+    }
+  }
 }
 
 function renderContent(text: string): React.ReactNode {
