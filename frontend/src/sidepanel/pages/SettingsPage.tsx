@@ -34,6 +34,7 @@ import {
   setCaptureSettings,
 } from "~lib/services/captureSettingsService";
 import {
+  BYOK_MODEL_WHITELIST,
   DEFAULT_BACKUP_MODEL,
   DEFAULT_PROXY_BASE_URL,
   DEFAULT_PROXY_URL,
@@ -42,6 +43,7 @@ import {
   buildDefaultLlmSettings,
   getLlmAccessMode,
   normalizeLlmSettings,
+  sanitizeByokModelId,
 } from "~lib/services/llmConfig";
 import {
   applyUiTheme,
@@ -57,7 +59,6 @@ import {
 } from "~lib/services/storageService";
 import { DisclosureSection } from "../components/DisclosureSection";
 
-const MODEL_OPTIONS = [DEFAULT_STABLE_MODEL, DEFAULT_BACKUP_MODEL];
 const MIN_TURNS_DEFAULT = DEFAULT_CAPTURE_SETTINGS.smartConfig.minTurns;
 
 const CAPTURE_MODE_OPTIONS: Array<{ value: CaptureMode; label: string; description: string }> = [
@@ -272,7 +273,7 @@ function resolveSettingsForMode(settings: LlmConfig): LlmConfig {
     });
   }
 
-  const customModel = (next.customModelId || next.modelId || "").trim();
+  const customModel = sanitizeByokModelId(next.customModelId || next.modelId);
   return normalizeLlmSettings({
     ...next,
     mode,
@@ -848,12 +849,10 @@ export function SettingsPage({ onNavigateToData }: SettingsPageProps) {
 
                   <div className="model-access-field-group">
                     <label className="model-access-input-label">
-                      Model <span className="model-access-label-optional">- optional override</span>
+                      Model <span className="model-access-label-optional">- whitelist only</span>
                     </label>
-                    <input
-                      type="text"
-                      list="model-access-model-options"
-                      value={llmSettings.customModelId ?? llmSettings.modelId}
+                    <select
+                      value={sanitizeByokModelId(llmSettings.customModelId ?? llmSettings.modelId)}
                       onChange={(event) =>
                         setLlmSettingsState((prev) =>
                           normalizeLlmSettings({
@@ -864,13 +863,11 @@ export function SettingsPage({ onNavigateToData }: SettingsPageProps) {
                         )
                       }
                       className="model-access-input"
-                      placeholder="claude-sonnet-4-20250514"
-                    />
-                    <datalist id="model-access-model-options">
-                      {MODEL_OPTIONS.map((model) => (
+                    >
+                      {BYOK_MODEL_WHITELIST.map((model) => (
                         <option key={model} value={model} />
                       ))}
-                    </datalist>
+                    </select>
                   </div>
                 </>
               )}

@@ -10,11 +10,28 @@ export const DEFAULT_PROXY_URL = `${DEFAULT_PROXY_BASE_URL}/chat`;
 export const DEFAULT_PROXY_EMBEDDINGS_URL = `${DEFAULT_PROXY_BASE_URL}/embeddings`;
 export const DEFAULT_STABLE_MODEL = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B";
 export const DEFAULT_BACKUP_MODEL = "Qwen/Qwen3-14B";
+export const BYOK_MODEL_WHITELIST = [
+  DEFAULT_STABLE_MODEL,
+  DEFAULT_BACKUP_MODEL,
+  "deepseek-ai/DeepSeek-V3",
+  "deepseek-ai/DeepSeek-R1",
+  "Qwen/Qwen3-8B",
+  "Qwen/Qwen3-32B",
+  "deepseek-ai/DeepSeek-V3.2",
+] as const;
 
 export type ProxyRoute = "chat" | "embeddings";
 
+const BYOK_MODEL_SET = new Set<string>(BYOK_MODEL_WHITELIST);
+
 function normalizeMode(mode: LlmAccessMode | undefined): LlmAccessMode {
   return mode === "custom_byok" ? "custom_byok" : "demo_proxy";
+}
+
+export function sanitizeByokModelId(modelId: string | null | undefined): string {
+  const candidate = (modelId || "").trim();
+  if (!candidate) return DEFAULT_STABLE_MODEL;
+  return BYOK_MODEL_SET.has(candidate) ? candidate : DEFAULT_STABLE_MODEL;
 }
 
 function normalizeThinkPolicy(
@@ -118,8 +135,7 @@ export function normalizeLlmSettings(
 
   const mode = normalizeMode(settings.mode);
   const modelId = (settings.modelId || "").trim() || DEFAULT_STABLE_MODEL;
-  const customModelId =
-    (settings.customModelId || "").trim() || modelId || DEFAULT_STABLE_MODEL;
+  const byokModelId = sanitizeByokModelId(settings.customModelId || modelId);
   const proxyBaseUrl = getProxyBaseUrl(settings);
   const proxyUrl = getProxyRouteUrl({ proxyBaseUrl, proxyUrl: settings.proxyUrl }, "chat");
   const proxyServiceToken = (settings.proxyServiceToken || "").trim();
@@ -155,13 +171,13 @@ export function normalizeLlmSettings(
     ...settings,
     provider: "modelscope",
     baseUrl: MODELSCOPE_BASE_URL,
-    modelId,
+    modelId: byokModelId,
     mode,
     proxyBaseUrl,
     proxyUrl,
     proxyServiceToken,
     gatewayLock: "modelscope",
-    customModelId,
+    customModelId: byokModelId,
     streamMode: settings.streamMode === "on" ? "on" : "off",
     reasoningPolicy:
       settings.reasoningPolicy === "auto" || settings.reasoningPolicy === "force"
@@ -180,5 +196,9 @@ export function getLlmAccessMode(settings: LlmConfig): LlmAccessMode {
 }
 
 export function getEffectiveModelId(settings: LlmConfig): string {
-  return (settings.customModelId || settings.modelId || DEFAULT_STABLE_MODEL).trim();
+  if (normalizeMode(settings.mode) === "custom_byok") {
+    return sanitizeByokModelId(settings.customModelId || settings.modelId);
+  }
+
+  return (settings.modelId || DEFAULT_STABLE_MODEL).trim() || DEFAULT_STABLE_MODEL;
 }
