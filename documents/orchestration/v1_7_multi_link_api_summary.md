@@ -192,3 +192,35 @@ Recommendation for v1.7 stabilization:
 1. add deployment-as-code (`vercel.json` + env checklist)
 2. pin proxy contract version in CI smoke checks (`/chat` + `/embeddings`)
 3. gate release on contract-level health checks, not UI-only validation
+
+---
+
+## 9) Update 2026-02-24 (Hackathon MVP patch)
+
+1. Proxy soft guardrails are now implemented in `vesti-proxy` `/api/chat`:
+   - high-threshold rate limit (`300/10min` + burst `120/60s`)
+   - concurrency guard (`global 200`, per-ip `40`)
+   - circuit breaker (`60s` window, min samples `80`, open `15s`, half-open probes `12`)
+   - new operational error codes:
+     - `RATE_LIMITED` (429)
+     - `PROXY_OVERLOADED` (503)
+     - `CIRCUIT_OPEN` (503)
+   - `retry-after` and `x-rate-limit-*` headers are emitted on protected paths.
+
+2. Summary chain now includes Agent A compaction pre-step (schema unchanged):
+   - Runtime path: `compaction -> conversationSummary(v2) -> repair -> fallback`
+   - If compaction fails, summary automatically falls back to direct transcript path.
+   - Added observability fields in summary logs:
+     - `compactionUsed`
+     - `compactionFailed`
+     - `compactionCharsIn`
+     - `compactionCharsOut`
+     - `summaryPath` (`compacted | direct`)
+
+3. Weekly input now prioritizes structured summary evidence:
+   - ranking prefers `summary.structured` before plain summary text.
+   - weekly input logs include `summaryEvidenceCount` and `structuredEvidenceCount`.
+
+4. Build and gate status for this patch:
+   - `pnpm -C frontend build` -> pass
+   - `pnpm -C frontend eval:prompts --mode=mock --strict` -> pass

@@ -43,13 +43,15 @@ const WEEKLY_MAX_CHARS = 12000;
 const WEEKLY_DEFAULT_INPUT_LIMIT = 8;
 const WEEKLY_CANDIDATE_LIMIT = 10;
 const SUMMARY_REFERENCE_MAX_CHARS = 240;
+const COMPACTION_OUTPUT_MIN_CHARS = 24;
 
-type PromptType = "conversationSummary" | "weeklyDigest";
+type PromptType = "compaction" | "conversationSummary" | "weeklyDigest";
 type GenerationMode = "plain_text" | "json_mode" | "prompt_json" | "fallback_text";
 type SummarySchemaVersion = "conversation_summary.v1" | "conversation_summary.v2";
 type WeeklySchemaVersion = "weekly_report.v1" | "weekly_lite.v1";
 type SummaryStructured = ConversationSummaryV1 | ConversationSummaryV2;
 type WeeklyStructured = WeeklyReportV1 | WeeklyLiteReportV1;
+type SummaryPath = "compacted" | "direct";
 
 interface ParseResult<T, TVersion extends string> {
   data: T | null;
@@ -69,6 +71,11 @@ interface StructuredGenerationResult<T, TVersion extends string> {
   attempt: number;
   validationErrors: string[];
   fallbackStage?: "none" | "repair_json" | "fallback_text";
+  compactionUsed?: boolean;
+  compactionFailed?: boolean;
+  compactionCharsIn?: number;
+  compactionCharsOut?: number;
+  summaryPath?: SummaryPath;
 }
 
 interface PromptUsageLog {
@@ -83,6 +90,11 @@ interface PromptUsageLog {
   status?: InsightStatus;
   route?: "proxy" | "modelscope";
   fallbackStage?: "none" | "repair_json" | "fallback_text";
+  compactionUsed?: boolean;
+  compactionFailed?: boolean;
+  compactionCharsIn?: number;
+  compactionCharsOut?: number;
+  summaryPath?: SummaryPath;
   latencyMs: number;
   success: boolean;
 }
@@ -310,6 +322,120 @@ function parseWeeklyFromRaw(raw: string): ParseResult<WeeklyStructured, WeeklySc
   }
 }
 
+interface CompactionExecution {
+  used: boolean;
+  failed: boolean;
+  content: string;
+  charsIn: number;
+  charsOut: number;
+}
+
+function countInputChars(messages: Message[]): number {
+  return messages.reduce((sum, message) => sum + message.content_text.length, 0);
+}
+
+function buildSummaryPromptFromCompaction(
+  conversation: Conversation,
+  compactedContext: string
+): string {
+  return `请基于下面的压缩骨架输出 conversation_summary.v2 JSON。
+
+对话标题：${conversation.title}
+平台：${conversation.platform}
+消息数：${conversation.message_count}
+
+压缩骨架：
+${compactedContext}
+
+约束：
+1) 只输出 JSON 对象。
+2) 不引入骨架中不存在的新事实。
+3) 如果某字段缺证据，使用空数组或 null。`;
+}
+
+async function runCompaction(
+  settings: LlmConfig,
+  conversation: Conversation,
+  messages: Message[]
+): Promise<CompactionExecution> {
+  const prompt = getPrompt("compaction", { variant: "current" });
+  const charsIn = countInputChars(messages);
+  const payload = {
+    conversationTitle: conversation.title,
+    conversationPlatform: conversation.platform,
+    conversationCreatedAt: conversation.created_at,
+    messages,
+    locale: "zh" as const,
+  };
+
+  const startedAt = Date.now();
+  try {
+    const compactionPrompt = truncateForContext(
+      prompt.userTemplate(payload),
+      SUMMARY_MAX_CHARS
+    );
+    const result = await callInference(settings, compactionPrompt, {
+      systemPrompt: prompt.system,
+    });
+    const content = result.content.trim();
+    const charsOut = content.length;
+
+    if (charsOut < COMPACTION_OUTPUT_MIN_CHARS) {
+      throw new Error("COMPACTION_OUTPUT_TOO_SHORT");
+    }
+
+    logPromptUsage({
+      promptType: "compaction",
+      promptVersion: prompt.version,
+      mode: result.mode,
+      attempt: 1,
+      validationErrors: [],
+      inputCount: messages.length,
+      route: result.route,
+      fallbackStage: "none",
+      compactionUsed: true,
+      compactionFailed: false,
+      compactionCharsIn: charsIn,
+      compactionCharsOut: charsOut,
+      latencyMs: Date.now() - startedAt,
+      success: true,
+    });
+
+    return {
+      used: true,
+      failed: false,
+      content,
+      charsIn,
+      charsOut,
+    };
+  } catch (error) {
+    const reason = (error as Error).message || "COMPACTION_FAILED";
+    logPromptUsage({
+      promptType: "compaction",
+      promptVersion: prompt.version,
+      mode: "fallback_text",
+      attempt: 1,
+      validationErrors: [reason],
+      inputCount: messages.length,
+      fallbackStage: "fallback_text",
+      compactionUsed: false,
+      compactionFailed: true,
+      compactionCharsIn: charsIn,
+      compactionCharsOut: 0,
+      latencyMs: Date.now() - startedAt,
+      success: false,
+    });
+
+    return {
+      used: false,
+      failed: true,
+      content: "",
+      charsIn,
+      charsOut: 0,
+    };
+  }
+}
+
 function buildSummaryReference(content: string): string {
   const compact = sanitizeSummaryText(content).replace(/\s+/g, " ").trim();
   if (!compact) {
@@ -319,6 +445,50 @@ function buildSummaryReference(content: string): string {
     return compact;
   }
   return `${compact.slice(0, SUMMARY_REFERENCE_MAX_CHARS)}...`;
+}
+
+function buildStructuredSummaryReference(
+  structured: SummaryRecord["structured"]
+): string | null {
+  if (!structured || typeof structured !== "object") {
+    return null;
+  }
+
+  if ("core_question" in structured) {
+    const v2 = structured as ConversationSummaryV2;
+    const parts: string[] = [];
+    if (v2.core_question) {
+      parts.push(v2.core_question);
+    }
+    if (Array.isArray(v2.key_insights) && v2.key_insights.length > 0) {
+      parts.push(
+        ...v2.key_insights
+          .slice(0, 2)
+          .map((item) => `${item.term}: ${item.definition}`)
+      );
+    }
+    if (Array.isArray(v2.unresolved_threads) && v2.unresolved_threads.length > 0) {
+      parts.push(v2.unresolved_threads[0]);
+    }
+    const text = parts.join(" ");
+    return text ? buildSummaryReference(text) : null;
+  }
+
+  if ("topic_title" in structured) {
+    const v1 = structured as ConversationSummaryV1;
+    const text = [v1.topic_title, ...(v1.key_takeaways || []).slice(0, 2)].join(" ");
+    return text ? buildSummaryReference(text) : null;
+  }
+
+  return null;
+}
+
+function buildSummaryReferenceFromRecord(summaryRecord: SummaryRecord): string {
+  const structuredRef = buildStructuredSummaryReference(summaryRecord.structured);
+  if (structuredRef) {
+    return structuredRef;
+  }
+  return buildSummaryReference(summaryRecord.content || "");
 }
 
 function selectWeeklyCandidates(conversations: Conversation[]): Conversation[] {
@@ -331,6 +501,8 @@ async function buildWeeklyLiteInput(
 ): Promise<{
   selectedConversations: Conversation[];
   selectedSummaries: Array<{ conversationId: number; summary: string }>;
+  summaryEvidenceCount: number;
+  structuredEvidenceCount: number;
 }> {
   const candidates = selectWeeklyCandidates(conversations);
   const summaries = await Promise.all(
@@ -345,6 +517,12 @@ async function buildWeeklyLiteInput(
 
   const ranked = summaries
     .sort((a, b) => {
+      const aHasStructured = a.summaryRecord?.structured ? 1 : 0;
+      const bHasStructured = b.summaryRecord?.structured ? 1 : 0;
+      if (aHasStructured !== bHasStructured) {
+        return bHasStructured - aHasStructured;
+      }
+
       const aHasSummary = a.summaryRecord?.content ? 1 : 0;
       const bHasSummary = b.summaryRecord?.content ? 1 : 0;
       if (aHasSummary !== bHasSummary) {
@@ -358,16 +536,20 @@ async function buildWeeklyLiteInput(
     .slice(0, WEEKLY_DEFAULT_INPUT_LIMIT);
 
   const selectedConversations = ranked.map((item) => item.conversation);
-  const selectedSummaries = ranked
-    .filter((item) => !!item.summaryRecord?.content)
-    .map((item) => ({
-      conversationId: item.conversation.id,
-      summary: buildSummaryReference(item.summaryRecord!.content),
-    }));
+  const selectedWithEvidence = ranked
+    .filter((item) => !!item.summaryRecord?.content || !!item.summaryRecord?.structured);
+  const selectedSummaries = selectedWithEvidence.map((item) => ({
+    conversationId: item.conversation.id,
+    summary: buildSummaryReferenceFromRecord(item.summaryRecord!),
+  }));
 
   return {
     selectedConversations,
     selectedSummaries,
+    summaryEvidenceCount: selectedWithEvidence.length,
+    structuredEvidenceCount: selectedWithEvidence.filter(
+      (item) => !!item.summaryRecord?.structured
+    ).length,
   };
 }
 
@@ -379,6 +561,9 @@ async function generateStructuredSummary(
   StructuredGenerationResult<SummaryStructured, SummarySchemaVersion>
 > {
   const prompt = getPrompt("conversationSummary", { variant: "current" });
+  const compaction = await runCompaction(settings, conversation, messages);
+  const summaryPath: SummaryPath = compaction.used ? "compacted" : "direct";
+
   const payload = {
     conversationTitle: conversation.title,
     conversationPlatform: conversation.platform,
@@ -387,9 +572,13 @@ async function generateStructuredSummary(
     locale: "zh" as const,
   };
 
+  const summaryPromptInput = compaction.used
+    ? buildSummaryPromptFromCompaction(conversation, compaction.content)
+    : prompt.userTemplate(payload);
+
   const firstAttemptStartedAt = Date.now();
   const primaryPrompt = truncateForContext(
-    prompt.userTemplate(payload),
+    summaryPromptInput,
     SUMMARY_MAX_CHARS
   );
   const first = await callInference(settings, primaryPrompt, {
@@ -408,6 +597,11 @@ async function generateStructuredSummary(
     inputCount: messages.length,
     route: first.route,
     fallbackStage: firstParsed.data ? "none" : "repair_json",
+    compactionUsed: compaction.used,
+    compactionFailed: compaction.failed,
+    compactionCharsIn: compaction.charsIn,
+    compactionCharsOut: compaction.charsOut,
+    summaryPath,
     latencyMs: Date.now() - firstAttemptStartedAt,
     success: !!firstParsed.data,
   });
@@ -425,6 +619,11 @@ async function generateStructuredSummary(
       attempt: 1,
       validationErrors: [],
       fallbackStage: "none",
+      compactionUsed: compaction.used,
+      compactionFailed: compaction.failed,
+      compactionCharsIn: compaction.charsIn,
+      compactionCharsOut: compaction.charsOut,
+      summaryPath,
     };
   }
 
@@ -449,6 +648,11 @@ async function generateStructuredSummary(
     inputCount: messages.length,
     route: second.route,
     fallbackStage: secondParsed.data ? "none" : "fallback_text",
+    compactionUsed: compaction.used,
+    compactionFailed: compaction.failed,
+    compactionCharsIn: compaction.charsIn,
+    compactionCharsOut: compaction.charsOut,
+    summaryPath,
     latencyMs: Date.now() - secondAttemptStartedAt,
     success: !!secondParsed.data,
   });
@@ -466,6 +670,11 @@ async function generateStructuredSummary(
       attempt: 2,
       validationErrors: firstParsed.errors,
       fallbackStage: "repair_json",
+      compactionUsed: compaction.used,
+      compactionFailed: compaction.failed,
+      compactionCharsIn: compaction.charsIn,
+      compactionCharsOut: compaction.charsOut,
+      summaryPath,
     };
   }
 
@@ -489,6 +698,11 @@ async function generateStructuredSummary(
     inputCount: messages.length,
     route: fallbackResponse.route,
     fallbackStage: "fallback_text",
+    compactionUsed: compaction.used,
+    compactionFailed: compaction.failed,
+    compactionCharsIn: compaction.charsIn,
+    compactionCharsOut: compaction.charsOut,
+    summaryPath,
     latencyMs: Date.now() - fallbackStartedAt,
     format: "fallback_plain_text",
     status: "fallback",
@@ -506,6 +720,11 @@ async function generateStructuredSummary(
     attempt: 3,
     validationErrors: [...firstParsed.errors, ...secondParsed.errors],
     fallbackStage: "fallback_text",
+    compactionUsed: compaction.used,
+    compactionFailed: compaction.failed,
+    compactionCharsIn: compaction.charsIn,
+    compactionCharsOut: compaction.charsOut,
+    summaryPath,
   };
 }
 
@@ -556,6 +775,13 @@ async function generateStructuredWeekly(
     maxConversations: weeklyInput.selectedConversations.length,
     locale: "zh" as const,
   };
+
+  logger.info("service", "Weekly input assembled", {
+    candidateCount: conversations.length,
+    selectedConversationCount: weeklyInput.selectedConversations.length,
+    summaryEvidenceCount: weeklyInput.summaryEvidenceCount,
+    structuredEvidenceCount: weeklyInput.structuredEvidenceCount,
+  });
 
   const firstAttemptStartedAt = Date.now();
   const primaryPrompt = truncateForContext(
@@ -706,6 +932,11 @@ export async function generateConversationSummary(
     format: generated.format,
     status: generated.status,
     fallbackStage: generated.fallbackStage ?? "none",
+    compactionUsed: generated.compactionUsed ?? false,
+    compactionFailed: generated.compactionFailed ?? false,
+    compactionCharsIn: generated.compactionCharsIn ?? 0,
+    compactionCharsOut: generated.compactionCharsOut ?? 0,
+    summaryPath: generated.summaryPath ?? "direct",
   });
 
   if (previous?.status === "fallback" && generated.status === "fallback") {

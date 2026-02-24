@@ -130,3 +130,51 @@ No skill markdown files were modified.
 
 3. v1.7 API status summary (this phase):
 - `documents/orchestration/v1_7_multi_link_api_summary.md`
+
+## 10) Update (2026-02-24) - Hackathon MVP soft-guard + Agent A patch
+
+Status: implemented, validated locally, pending commit hash annotation in this memo.
+
+### A) vesti-proxy (`E:\\GT\\DEV\\vesti-proxy`)
+
+1. `api/chat.js` now has high-threshold soft protection:
+- rate limit: `300/10min` + burst `120/60s`
+- concurrency: global `200`, per-ip `40`
+- circuit breaker: 60s window, min `80` samples, open `15s`, half-open `12` probes
+2. New runtime error codes:
+- `RATE_LIMITED` (429)
+- `PROXY_OVERLOADED` (503)
+- `CIRCUIT_OPEN` (503)
+3. New operational headers:
+- `retry-after`
+- `x-rate-limit-limit`
+- `x-rate-limit-remaining`
+- `x-rate-limit-reset`
+4. CORS preflight now allows `x-vesti-service-token` header (still anonymous-access mode).
+
+### B) vesti extension (`D:\\python_code\\Hackathon\\vesti`)
+
+1. Prompt system extended with Agent A entry:
+- new `PromptType`: `compaction`
+- new prompt module: `frontend/src/lib/prompts/compaction.ts`
+- prompt registry wired in `frontend/src/lib/prompts/index.ts`
+2. Summary generation chain changed to:
+- `compaction -> structured summary parse -> repair -> fallback text`
+- compaction failure auto-falls back to direct summary path.
+3. Added summary observability fields in logs:
+- `compactionUsed`
+- `compactionFailed`
+- `compactionCharsIn`
+- `compactionCharsOut`
+- `summaryPath`
+4. Weekly stabilization:
+- weekly candidate ranking now prioritizes records with structured summary evidence.
+- weekly input assembly logs include:
+  - `summaryEvidenceCount`
+  - `structuredEvidenceCount`
+
+### C) Validation
+
+1. `pnpm -C frontend build` -> pass
+2. `pnpm -C frontend eval:prompts --mode=mock --strict` -> pass
+3. `node --check E:\\GT\\DEV\\vesti-proxy\\api\\chat.js` -> pass
