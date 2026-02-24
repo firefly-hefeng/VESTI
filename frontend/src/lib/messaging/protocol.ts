@@ -52,6 +52,44 @@ export interface ParsedMessage {
   timestamp?: number;
 }
 
+export type InsightPipelineScope = "summary" | "weekly";
+
+export type InsightPipelineStage =
+  | "initiating_pipeline"
+  | "distilling_core_logic"
+  | "curating_summary"
+  | "aggregating_weekly_digest"
+  | "persisting_result"
+  | "completed"
+  | "degraded_fallback";
+
+export type InsightPipelineStatus =
+  | "in_progress"
+  | "completed"
+  | "degraded_fallback";
+
+export type InsightPipelineRoute = "proxy" | "modelscope" | "unknown";
+
+export interface InsightPipelineProgressPayload {
+  pipelineId: string;
+  scope: InsightPipelineScope;
+  targetId: string;
+  stage: InsightPipelineStage;
+  status: InsightPipelineStatus;
+  attempt: number;
+  startedAt: number;
+  updatedAt: number;
+  route: InsightPipelineRoute;
+  modelId: string;
+  promptVersion: string;
+  seq: number;
+}
+
+export interface InsightPipelineProgressMessage {
+  type: "INSIGHT_PIPELINE_PROGRESS";
+  payload: InsightPipelineProgressPayload;
+}
+
 export type RequestMessage =
   | {
       type: "CAPTURE_CONVERSATION";
@@ -227,4 +265,33 @@ export function isRequestMessage(value: unknown): value is RequestMessage {
   if (!value || typeof value !== "object") return false;
   const msg = value as { type?: unknown };
   return typeof msg.type === "string";
+}
+
+export function isInsightPipelineProgressMessage(
+  value: unknown
+): value is InsightPipelineProgressMessage {
+  if (!value || typeof value !== "object") return false;
+
+  const message = value as {
+    type?: unknown;
+    payload?: Partial<InsightPipelineProgressPayload>;
+  };
+  if (message.type !== "INSIGHT_PIPELINE_PROGRESS") return false;
+  if (!message.payload || typeof message.payload !== "object") return false;
+
+  const payload = message.payload;
+  return (
+    typeof payload.pipelineId === "string" &&
+    typeof payload.scope === "string" &&
+    typeof payload.targetId === "string" &&
+    typeof payload.stage === "string" &&
+    typeof payload.status === "string" &&
+    typeof payload.attempt === "number" &&
+    typeof payload.startedAt === "number" &&
+    typeof payload.updatedAt === "number" &&
+    typeof payload.route === "string" &&
+    typeof payload.modelId === "string" &&
+    typeof payload.promptVersion === "string" &&
+    typeof payload.seq === "number"
+  );
 }
