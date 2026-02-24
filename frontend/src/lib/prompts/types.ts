@@ -1,4 +1,4 @@
-﻿import type { Conversation, Message } from "../types";
+import type { Conversation, ConversationSummaryV2, Message } from "../types";
 
 export type PromptType = "compaction" | "conversationSummary" | "weeklyDigest";
 export type PromptVariant = "current" | "experimental";
@@ -23,6 +23,10 @@ export interface WeeklyDigestPromptPayload {
   conversations: Conversation[];
   rangeStart: number;
   rangeEnd: number;
+  summaryEntries?: Array<{
+    conversationId: number;
+    summary: ConversationSummaryV2;
+  }>;
   selectedSummaries?: Array<{
     conversationId: number;
     summary: string;

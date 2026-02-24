@@ -240,6 +240,12 @@ export interface WeeklyLiteReportV1 {
   };
   highlights: string[];
   recurring_questions: string[];
+  cross_domain_echoes: Array<{
+    domain_a: string;
+    domain_b: string;
+    shared_logic: string;
+    evidence_ids: number[];
+  }>;
   unresolved_threads: string[];
   suggested_focus: string[];
   evidence: Array<{

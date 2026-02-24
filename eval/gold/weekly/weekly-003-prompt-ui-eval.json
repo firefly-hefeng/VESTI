@@ -1,67 +1,40 @@
 {
   "id": "weekly-003-prompt-ui-eval",
   "type": "weekly",
-  "locale": "zh",
+  "locale": "en",
   "range_start": 1771107600000,
   "range_end": 1771543200000,
   "conversations": [
-    {
-      "id": 301,
-      "title": "Prompt Registry ??",
-      "platform": "Claude",
-      "created_at": 1771194000000,
-      "snippet": "current/experimental ?????????",
-      "message_count": 14
-    },
-    {
-      "id": 302,
-      "title": "SummaryCard PRD ??",
-      "platform": "ChatGPT",
-      "created_at": 1771280400000,
-      "snippet": "? AI ?????????????????",
-      "message_count": 10
-    },
-    {
-      "id": 303,
-      "title": "???????",
-      "platform": "Claude",
-      "created_at": 1771366800000,
-      "snippet": "gold ?? + rubric + gate ?????????",
-      "message_count": 12
-    }
+    {"id": 301, "title": "Prompt registry versioning", "platform": "Claude", "created_at": 1771194000000, "snippet": "Align current and experimental prompt versions.", "message_count": 14},
+    {"id": 302, "title": "Insights UI readability", "platform": "ChatGPT", "created_at": 1771280400000, "snippet": "Remove decorative counters and noisy markers.", "message_count": 10},
+    {"id": 303, "title": "Eval gate upgrade", "platform": "Claude", "created_at": 1771366800000, "snippet": "Add strict weekly semantic metrics.", "message_count": 12}
   ],
   "gold": {
-    "required_facts": [
-      "prompt",
-      "ui",
-      "gold",
-      "gate"
-    ],
-    "forbidden_facts": [
-      "sparkles",
-      "metaverse"
-    ],
+    "required_facts": ["version", "UI", "eval", "strict"],
+    "forbidden_facts": ["Metaverse", "NFT"],
     "reference": {
-      "period_title": "Prompt + UI + Eval ????",
-      "main_themes": [
-        "Prompt Registry ??????",
-        "Summary/Weekly ?????? UI",
-        "???? sidecar ?????"
+      "time_range": {"start": "2026-02-15", "end": "2026-02-20", "total_conversations": 3},
+      "highlights": [
+        "Prompt version governance and UI cleanup were synchronized to avoid contract drift between generation and rendering.",
+        "The eval pipeline now enforces strict weekly semantic checks instead of relying on parse success alone."
       ],
-      "key_takeaways": [
-        "???? UI ????????????",
-        "gold ???? prompt ?????",
-        "???????? CI gate ????????"
+      "recurring_questions": [
+        "How can version changes remain fast while eval coverage stays strict enough to block semantic regressions?"
       ],
-      "action_items": [
-        "?? eval:prompts ????? latest?",
-        "????? rubric ??????"
+      "cross_domain_echoes": [
+        {"domain_a": "Prompt-as-code", "domain_b": "UI contract stability", "shared_logic": "Both depend on explicit boundaries so that local changes cannot silently break downstream behavior.", "evidence_ids": [301, 303]}
       ],
-      "tech_stack_detected": [
-        "Prompt Engineering",
-        "React",
-        "TypeScript"
-      ]
+      "unresolved_threads": [
+        "Mixed-language sentence quality checks still need broader evaluation before full rollout."
+      ],
+      "suggested_focus": [
+        "Create bilingual weekly cases that test strict semantic rules in both English and Chinese outputs."
+      ],
+      "evidence": [
+        {"conversation_id": 301, "note": "Defined version labels and upgrade responsibilities."},
+        {"conversation_id": 303, "note": "Added strict weekly semantic scoring and gate logic."}
+      ],
+      "insufficient_data": false
     }
   }
 }

@@ -1,0 +1,27 @@
+{
+  "id": "weekly-005-sub3-circuit-hardstop",
+  "type": "weekly",
+  "locale": "en",
+  "range_start": 1772234400000,
+  "range_end": 1772666400000,
+  "conversations": [
+    {"id": 501, "title": "Single thread patch", "platform": "Claude", "created_at": 1772320800000, "snippet": "Only one substantial structured summary exists.", "message_count": 5},
+    {"id": 502, "title": "Sparse follow-up notes", "platform": "ChatGPT", "created_at": 1772407200000, "snippet": "Insufficient key insights for aggregation.", "message_count": 4}
+  ],
+  "gold": {
+    "required_facts": ["structured threads", "insufficient", "cross-topic", "aggregation"],
+    "forbidden_facts": ["long-term trend", "cross-domain synthesis"],
+    "reference": {
+      "time_range": {"start": "2026-02-28", "end": "2026-03-04", "total_conversations": 2},
+      "highlights": [
+        "There are insufficient structured threads this week, so cross-topic aggregation is intentionally skipped."
+      ],
+      "recurring_questions": [],
+      "cross_domain_echoes": [],
+      "unresolved_threads": [],
+      "suggested_focus": [],
+      "evidence": [],
+      "insufficient_data": true
+    }
+  }
+}

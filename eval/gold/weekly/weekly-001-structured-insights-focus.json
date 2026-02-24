@@ -1,67 +1,42 @@
 {
   "id": "weekly-001-structured-insights-focus",
   "type": "weekly",
-  "locale": "zh",
+  "locale": "en",
   "range_start": 1770762000000,
   "range_end": 1771280580000,
   "conversations": [
-    {
-      "id": 101,
-      "title": "Summary ???????",
-      "platform": "Claude",
-      "created_at": 1771021200000,
-      "snippet": "??????? JSON schema??? fallback?",
-      "message_count": 16
-    },
-    {
-      "id": 102,
-      "title": "Insight Adapter ??",
-      "platform": "ChatGPT",
-      "created_at": 1771107600000,
-      "snippet": "??????????? adapter ???????",
-      "message_count": 12
-    },
-    {
-      "id": 103,
-      "title": "Weekly Card ????",
-      "platform": "Claude",
-      "created_at": 1771194000000,
-      "snippet": "Summary ? Weekly ?????????",
-      "message_count": 9
-    }
+    {"id": 101, "title": "Summary density gate tuning", "platform": "Claude", "created_at": 1771021200000, "snippet": "Investigate sparse unresolved and next-step output.", "message_count": 16},
+    {"id": 102, "title": "Weekly render cleanup", "platform": "ChatGPT", "created_at": 1771107600000, "snippet": "Remove noisy fragments in weekly cards.", "message_count": 12},
+    {"id": 103, "title": "Prompt evidence mapping", "platform": "Claude", "created_at": 1771194000000, "snippet": "Bind claims to concrete evidence rows.", "message_count": 9},
+    {"id": 104, "title": "Semantic repair loop", "platform": "Doubao", "created_at": 1771230000000, "snippet": "Define issue codes and degrade policy.", "message_count": 11}
   ],
   "gold": {
-    "required_facts": [
-      "summary",
-      "weekly",
-      "adapter",
-      "fallback"
-    ],
-    "forbidden_facts": [
-      "Kubernetes",
-      "Kafka"
-    ],
+    "required_facts": ["semantic gate", "evidence", "repair", "degrade"],
+    "forbidden_facts": ["Kubernetes", "Terraform"],
     "reference": {
-      "period_title": "??? Insights ????",
-      "main_themes": [
-        "Summary/Weekly ???????",
-        "Adapter ???????????",
-        "Fallback ?????????"
+      "time_range": {"start": "2026-02-12", "end": "2026-02-18", "total_conversations": 4},
+      "highlights": [
+        "The team finalized a semantic gate to stop low-signal weekly fragments before they reach readers.",
+        "Every non-trivial claim is now mapped to explicit evidence rows with conversation references.",
+        "A two-round repair path was added, followed by a controlled degrade path when semantic quality still fails."
       ],
-      "key_takeaways": [
-        "???????????????????",
-        "UI ??????? adapter ????",
-        "?????????????????"
+      "recurring_questions": [
+        "How can we preserve factual grounding while increasing list density through semantic repair?"
       ],
-      "action_items": [
-        "????????? baseline?",
-        "?? malformed JSON ??????"
+      "cross_domain_echoes": [
+        {"domain_a": "Prompt constraints", "domain_b": "UI filtering", "shared_logic": "Both layers enforce strict boundaries to block low-signal output from escaping into final presentation.", "evidence_ids": [101, 102, 103]}
       ],
-      "tech_stack_detected": [
-        "React",
-        "TypeScript",
-        "Zod"
-      ]
+      "unresolved_threads": [
+        "The trade-off between repair latency and output quality still needs a measurable budget policy."
+      ],
+      "suggested_focus": [
+        "Build a dedicated regression suite that stresses semantic gate behavior under high-noise weekly inputs."
+      ],
+      "evidence": [
+        {"conversation_id": 101, "note": "Discussed density gate thresholds and sparse list regressions."},
+        {"conversation_id": 104, "note": "Defined semantic issue codes and degrade criteria."}
+      ],
+      "insufficient_data": false
     }
   }
 }

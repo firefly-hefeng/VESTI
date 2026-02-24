@@ -40,7 +40,11 @@ Hard rules:
 5) meta_observations must use natural user-facing phrases, not technical labels like "deductive" or "precise".
 6) If locale is zh, write user-facing text in natural Chinese.
 7) key_insights can be [] when evidence is sparse.
-8) Optional <think>...</think> is allowed before JSON; it will be stripped by runtime.`;
+8) Optional <think>...</think> is allowed before JSON; it will be stripped by runtime.
+9) unresolved_threads and actionable_next_steps must be complete phrases, not 1-3 character fragments.
+10) When evidence is sufficient, unresolved_threads and actionable_next_steps should each contain 2-4 items.
+11) When evidence is insufficient, 1 item or [] is acceptable.
+12) Map from available evidence only; do not add unsupported facts.`;
 
 const LEGACY_SUMMARY_JSON_SCHEMA_HINT = {
   topic_title: "string (max 80 chars)",
@@ -106,6 +110,9 @@ ${transcript}
 - assertion 不能只复述结论，必须体现“为何出现 + 推动了下一步什么问题”。
 - real_world_anchor 写成普通读者可懂的“现实落点/实证案例”描述。
 - meta_observations 必须写成自然短语（例如“逐步深挖，每一问都在收紧范围”），不要用术语标签。
+- unresolved_threads / actionable_next_steps 每条都必须是完整短句，不要输出 1-3 个字的残片。
+- 证据充足时 unresolved_threads / actionable_next_steps 各给 2-4 条；证据不足可降到 1 条或空。
+- 严格从已有证据映射，不得补充未出现的新事实。
 - 仅输出 JSON 对象，不要输出 markdown 或额外说明。`;
 }
 

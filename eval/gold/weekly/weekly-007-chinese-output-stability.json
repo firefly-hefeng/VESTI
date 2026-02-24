@@ -1,0 +1,40 @@
+{
+  "id": "weekly-007-chinese-output-stability",
+  "type": "weekly",
+  "locale": "en",
+  "range_start": 1773357600000,
+  "range_end": 1773876000000,
+  "conversations": [
+    {"id": 701, "title": "Chinese output regression", "platform": "Claude", "created_at": 1773444000000, "snippet": "Ensure prompt and output stay stable in Chinese mode.", "message_count": 12},
+    {"id": 702, "title": "Embedding API alignment", "platform": "ChatGPT", "created_at": 1773530400000, "snippet": "Check conflicts between summary chain and embedding endpoint.", "message_count": 10},
+    {"id": 703, "title": "Multi-link runtime observability", "platform": "Qwen", "created_at": 1773616800000, "snippet": "Track proxy and BYOK route parity.", "message_count": 11}
+  ],
+  "gold": {
+    "required_facts": ["chinese output", "embedding api", "multi-link", "stability"],
+    "forbidden_facts": ["mojibake", "single-char fragment"],
+    "reference": {
+      "time_range": {"start": "2026-03-12", "end": "2026-03-18", "total_conversations": 3},
+      "highlights": [
+        "Chinese output stability checks were completed, and weekly narratives remained readable across regeneration runs.",
+        "Embedding API alignment reduced multi-link contract drift between proxy and BYOK execution paths."
+      ],
+      "recurring_questions": [
+        "How can multi-link observability stay consistent when route-specific retries produce different timing patterns?"
+      ],
+      "cross_domain_echoes": [
+        {"domain_a": "Prompt governance", "domain_b": "Multi-link routing", "shared_logic": "Both areas require explicit contracts so that local changes do not silently break downstream behavior.", "evidence_ids": [701, 703]}
+      ],
+      "unresolved_threads": [
+        "The interaction between embedding retrieval quality and weekly semantic gates still needs longer-range sampling."
+      ],
+      "suggested_focus": [
+        "Publish a weekly stability dashboard that tracks low-signal rate and evidence consistency for each route mode."
+      ],
+      "evidence": [
+        {"conversation_id": 701, "note": "Verified Chinese output stability after prompt baseline migration."},
+        {"conversation_id": 702, "note": "Documented embedding API conflict boundaries and integration guardrails."}
+      ],
+      "insufficient_data": false
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "id": "weekly-006-evidence-consistency",
+  "type": "weekly",
+  "locale": "en",
+  "range_start": 1772752800000,
+  "range_end": 1773271200000,
+  "conversations": [
+    {"id": 601, "title": "Evidence chain audit", "platform": "Claude", "created_at": 1772839200000, "snippet": "Verify weekly claims against conversation_id references.", "message_count": 9},
+    {"id": 602, "title": "Cross-domain evidence ids", "platform": "Qwen", "created_at": 1772925600000, "snippet": "Normalize evidence_ids annotation strategy.", "message_count": 10},
+    {"id": 603, "title": "Rollback accountability logs", "platform": "ChatGPT", "created_at": 1773012000000, "snippet": "Add trace fields for regression triage.", "message_count": 11}
+  ],
+  "gold": {
+    "required_facts": ["evidence chain", "conversation_id", "consistency", "logging templates"],
+    "forbidden_facts": ["fabricated id", "hallucinated evidence"],
+    "reference": {
+      "time_range": {"start": "2026-03-05", "end": "2026-03-10", "total_conversations": 3},
+      "highlights": [
+        "The weekly evidence chain now requires each major claim to map to a valid conversation_id and supporting note."
+      ],
+      "recurring_questions": [
+        "How can evidence consistency remain strong while semantic repair loops are still allowed for quality recovery?"
+      ],
+      "cross_domain_echoes": [
+        {"domain_a": "Evidence audit", "domain_b": "Rollback governance", "shared_logic": "Both workflows rely on traceable links so each decision can be validated and reversed safely.", "evidence_ids": [601, 603]}
+      ],
+      "unresolved_threads": [
+        "We still need better metrics on how model variability impacts evidence note quality across providers."
+      ],
+      "suggested_focus": [
+        "Automate evidence consistency checks and feed failing samples directly into weekly eval gold cases."
+      ],
+      "evidence": [
+        {"conversation_id": 601, "note": "Defined audit checks for claim-to-conversation mapping."},
+        {"conversation_id": 602, "note": "Specified evidence_ids normalization for cross-domain echoes."},
+        {"conversation_id": 603, "note": "Added rollback and accountability logging templates."}
+      ],
+      "insufficient_data": false
+    }
+  }
+}

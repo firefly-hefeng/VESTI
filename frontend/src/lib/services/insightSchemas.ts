@@ -16,6 +16,34 @@ const MAX_ASSERTION_LENGTH = 520;
 const MAX_ANCHOR_LENGTH = 320;
 const MAX_TERM_LENGTH = 120;
 const MAX_DEFINITION_LENGTH = 320;
+const MAX_WEEKLY_CROSS_DOMAIN_ECHOES = 4;
+const DEFAULT_WEEKLY_HIGHLIGHT = "本周形成了可复用的阶段性结论。";
+const DEFAULT_WEEKLY_SUGGESTED_FOCUS = "下周优先推进一个高价值问题并记录验证结果。";
+
+type WeeklyCrossDomainEcho = WeeklyLiteReportV1["cross_domain_echoes"][number];
+type WeeklyNarrativeField =
+  | "highlights"
+  | "recurring_questions"
+  | "unresolved_threads"
+  | "suggested_focus";
+
+export type WeeklySemanticIssueCode =
+  | "LOW_SIGNAL_HIGHLIGHT"
+  | "LOW_SIGNAL_RECURRING"
+  | "LOW_SIGNAL_UNRESOLVED"
+  | "LOW_SIGNAL_SUGGESTED_FOCUS"
+  | "EMPTY_VALID_HIGHLIGHTS"
+  | "RECURRING_NOT_QUESTIONLIKE"
+  | "EMPTY_VALID_SUGGESTED_FOCUS";
+
+export interface WeeklySemanticQuality {
+  passed: boolean;
+  issueCodes: WeeklySemanticIssueCode[];
+  highlightsCount: number;
+  recurringCount: number;
+  unresolvedCount: number;
+  suggestedCount: number;
+}
 
 const summarySchema = z.object({
   topic_title: z.string().min(1).max(MAX_TITLE_LENGTH),
@@ -88,8 +116,18 @@ const weeklyLiteSchema = z.object({
   }),
   highlights: z.array(z.string().min(1)).min(1).max(8),
   recurring_questions: z.array(z.string().min(1)).max(8),
+  cross_domain_echoes: z
+    .array(
+      z.object({
+        domain_a: z.string().min(1),
+        domain_b: z.string().min(1),
+        shared_logic: z.string().min(1),
+        evidence_ids: z.array(z.number().int().min(0)).max(8),
+      })
+    )
+    .max(MAX_WEEKLY_CROSS_DOMAIN_ECHOES),
   unresolved_threads: z.array(z.string().min(1)).max(8),
-  suggested_focus: z.array(z.string().min(1)).min(1).max(8),
+  suggested_focus: z.array(z.string().min(1)).max(8),
   evidence: z.array(
     z.object({
       conversation_id: z.number().int().min(0),
@@ -114,6 +152,47 @@ function cleanMeta(value: string): string {
   return cleanItem(value).slice(0, MAX_META_LENGTH);
 }
 
+function countCjkChars(value: string): number {
+  const matches = value.match(/[\u3400-\u9FFF]/g);
+  return matches ? matches.length : 0;
+}
+
+function countAsciiWords(value: string): number {
+  const matches = value.match(/[A-Za-z0-9][A-Za-z0-9+/_\-.]*/g);
+  return matches ? matches.length : 0;
+}
+
+export function isLowSignalNarrativeItem(value: string): boolean {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (!compact) return true;
+  if (/^[^A-Za-z0-9\u3400-\u9FFF]+$/.test(compact)) return true;
+  if (/^\d+\s*(\/|\\|-)\s*\d+$/.test(compact)) return true;
+  if (/^(n\/a|na|none|null|todo)$/i.test(compact)) return true;
+  if (
+    /^(获取|确认|查看|梳理|推进|优化|完善|明确|对齐|收集|验证|补充|建立|形成|评估|制定|修复|排查)[A-Za-z0-9\u3400-\u9FFF]{0,4}$/.test(
+      compact
+    )
+  ) {
+    return true;
+  }
+  if (/^(get|check|verify|confirm|fix|review|update|build)\s+\w{1,6}$/i.test(compact)) {
+    return true;
+  }
+
+  const cjkCount = countCjkChars(compact);
+  const asciiWordCount = countAsciiWords(compact);
+  const compactLen = compact.replace(/\s+/g, "").length;
+
+  if (cjkCount > 0) {
+    return cjkCount < 6;
+  }
+
+  if (asciiWordCount >= 3) return false;
+  if (asciiWordCount >= 2 && compactLen >= 8) return false;
+
+  return compactLen < 12;
+}
+
 function dedupePreserveOrder(items: string[]): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
@@ -133,6 +212,76 @@ function normalizeList(values: string[] | undefined, limit = MAX_LIST_ITEMS): st
     .filter((item) => item.length > 0)
     .slice(0, limit);
   return dedupePreserveOrder(cleaned).slice(0, limit);
+}
+
+function normalizeNarrativeList(values: string[] | undefined, limit = MAX_LIST_ITEMS): string[] {
+  return normalizeList(values, limit)
+    .filter((item) => !isLowSignalNarrativeItem(item))
+    .slice(0, limit);
+}
+
+function isQuestionLike(value: string): boolean {
+  if (/[?？]$/.test(value)) return true;
+  return /^(为什么|为何|如何|怎么|是否|能否|可否|what|why|how|should|can|is|are)\b/i.test(
+    value
+  );
+}
+
+export function normalizeWeeklyNarrativeList(
+  field: WeeklyNarrativeField,
+  values: string[] | undefined,
+  limit = MAX_LIST_ITEMS
+): string[] {
+  const normalized = normalizeList(values, limit).filter(
+    (item) => !isLowSignalNarrativeItem(item)
+  );
+
+  if (field === "recurring_questions") {
+    const questionLike = normalized.filter(isQuestionLike);
+    return questionLike.slice(0, limit);
+  }
+
+  return normalized.slice(0, limit);
+}
+
+function normalizeCrossDomainEchoes(
+  values: WeeklyCrossDomainEcho[] | undefined
+): WeeklyCrossDomainEcho[] {
+  if (!Array.isArray(values)) return [];
+
+  const normalized: WeeklyCrossDomainEcho[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    const domainA = cleanItem(value?.domain_a || "", 120);
+    const domainB = cleanItem(value?.domain_b || "", 120);
+    const sharedLogic = cleanItem(value?.shared_logic || "", MAX_LIST_ITEM_LENGTH);
+    if (!domainA || !domainB || !sharedLogic) continue;
+
+    const key = `${domainA.toLowerCase()}::${domainB.toLowerCase()}::${sharedLogic.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const evidenceIds = Array.isArray(value?.evidence_ids)
+      ? value.evidence_ids
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id >= 0)
+          .slice(0, 8)
+      : [];
+
+    normalized.push({
+      domain_a: domainA,
+      domain_b: domainB,
+      shared_logic: sharedLogic,
+      evidence_ids: evidenceIds,
+    });
+
+    if (normalized.length >= MAX_WEEKLY_CROSS_DOMAIN_ECHOES) {
+      break;
+    }
+  }
+
+  return normalized;
 }
 
 export function normalizeConversationSummary(input: {
@@ -244,8 +393,8 @@ function toInsightItemFromLine(line: string, index: number): ConversationSummary
 export function normalizeConversationSummaryV2Legacy(
   input: ConversationSummaryV2Legacy
 ): ConversationSummaryV2 {
-  const unresolvedThreads = normalizeList(input.unresolved_threads, 6);
-  const nextSteps = normalizeList(input.actionable_next_steps, 6);
+  const unresolvedThreads = normalizeNarrativeList(input.unresolved_threads, 6);
+  const nextSteps = normalizeNarrativeList(input.actionable_next_steps, 6);
 
   const steps: ConversationSummaryStep[] = [];
   const initialState = cleanItem(input.thinking_journey.initial_state, MAX_ASSERTION_LENGTH);
@@ -331,7 +480,7 @@ export function normalizeConversationSummaryV2(input: {
     step: number;
     speaker: "User" | "AI";
     assertion: string;
-    real_world_anchor: string | null;
+    real_world_anchor?: string | null;
   }>;
   key_insights: Array<{
     term: string;
@@ -345,8 +494,8 @@ export function normalizeConversationSummaryV2(input: {
   };
   actionable_next_steps: string[];
 }): ConversationSummaryV2 {
-  const unresolvedThreads = normalizeList(input.unresolved_threads, 6);
-  const nextSteps = normalizeList(input.actionable_next_steps, 6);
+  const unresolvedThreads = normalizeNarrativeList(input.unresolved_threads, 6);
+  const nextSteps = normalizeNarrativeList(input.actionable_next_steps, 6);
 
   const normalizedJourney = dedupeJourneySteps(
     (input.thinking_journey || [])
@@ -417,6 +566,12 @@ export function normalizeWeeklyLiteReport(input: {
   };
   highlights: string[];
   recurring_questions: string[];
+  cross_domain_echoes: Array<{
+    domain_a: string;
+    domain_b: string;
+    shared_logic: string;
+    evidence_ids: number[];
+  }>;
   unresolved_threads: string[];
   suggested_focus: string[];
   evidence: Array<{
@@ -425,10 +580,23 @@ export function normalizeWeeklyLiteReport(input: {
   }>;
   insufficient_data: boolean;
 }): WeeklyLiteReportV1 {
-  const highlights = normalizeList(input.highlights, 6);
-  const recurringQuestions = normalizeList(input.recurring_questions, 4);
-  const unresolvedThreads = normalizeList(input.unresolved_threads, 6);
-  const suggestedFocus = normalizeList(input.suggested_focus, 6);
+  const highlights = normalizeWeeklyNarrativeList("highlights", input.highlights, 6);
+  const recurringQuestions = normalizeWeeklyNarrativeList(
+    "recurring_questions",
+    input.recurring_questions,
+    4
+  );
+  const crossDomainEchoes = normalizeCrossDomainEchoes(input.cross_domain_echoes);
+  const unresolvedThreads = normalizeWeeklyNarrativeList(
+    "unresolved_threads",
+    input.unresolved_threads,
+    6
+  );
+  const suggestedFocus = normalizeWeeklyNarrativeList(
+    "suggested_focus",
+    input.suggested_focus,
+    6
+  );
   const evidence = (input.evidence || [])
     .slice(0, 8)
     .map((item) => ({
@@ -440,21 +608,106 @@ export function normalizeWeeklyLiteReport(input: {
   const totalConversations = Math.max(0, Math.floor(input.time_range.total_conversations));
   const insufficientData = input.insufficient_data || totalConversations < 3;
 
+  if (insufficientData) {
+    const sparseHighlight =
+      highlights[0] ??
+      (totalConversations > 0
+        ? `本周仅有 ${totalConversations} 个有效结构化会话，暂不进行跨主题聚合。`
+        : "本周没有可用于周报聚合的有效结构化会话。");
+
+    return {
+      time_range: {
+        start: input.time_range.start.trim(),
+        end: input.time_range.end.trim(),
+        total_conversations: totalConversations,
+      },
+      highlights: [sparseHighlight],
+      recurring_questions: [],
+      cross_domain_echoes: [],
+      unresolved_threads: [],
+      suggested_focus: [],
+      evidence: [],
+      insufficient_data: true,
+    };
+  }
+
   return {
     time_range: {
       start: input.time_range.start.trim(),
       end: input.time_range.end.trim(),
       total_conversations: totalConversations,
     },
-    highlights: highlights.length > 0 ? highlights : ["本周形成了可复用的阶段性结论。"],
+    highlights: highlights.length > 0 ? highlights : [DEFAULT_WEEKLY_HIGHLIGHT],
     recurring_questions: recurringQuestions,
+    cross_domain_echoes: crossDomainEchoes,
     unresolved_threads: unresolvedThreads,
     suggested_focus:
       suggestedFocus.length > 0
         ? suggestedFocus
-        : ["下周优先推进一个高价值问题并记录验证结果。"],
+        : [DEFAULT_WEEKLY_SUGGESTED_FOCUS],
     evidence,
     insufficient_data: insufficientData,
+  };
+}
+
+export function validateWeeklySemanticQuality(
+  report: WeeklyLiteReportV1
+): WeeklySemanticQuality {
+  if (report.insufficient_data) {
+    return {
+      passed: true,
+      issueCodes: [],
+      highlightsCount: report.highlights.length,
+      recurringCount: report.recurring_questions.length,
+      unresolvedCount: report.unresolved_threads.length,
+      suggestedCount: report.suggested_focus.length,
+    };
+  }
+
+  const issueCodes = new Set<WeeklySemanticIssueCode>();
+  const highlights = normalizeList(report.highlights, 6);
+  const recurring = normalizeList(report.recurring_questions, 4);
+  const unresolved = normalizeList(report.unresolved_threads, 6);
+  const suggested = normalizeList(report.suggested_focus, 6);
+
+  if (
+    highlights.length === 0 ||
+    (highlights.length === 1 && highlights[0] === DEFAULT_WEEKLY_HIGHLIGHT)
+  ) {
+    issueCodes.add("EMPTY_VALID_HIGHLIGHTS");
+  }
+  if (highlights.some((item) => isLowSignalNarrativeItem(item))) {
+    issueCodes.add("LOW_SIGNAL_HIGHLIGHT");
+  }
+
+  if (recurring.some((item) => isLowSignalNarrativeItem(item))) {
+    issueCodes.add("LOW_SIGNAL_RECURRING");
+  }
+  if (recurring.some((item) => !isQuestionLike(item))) {
+    issueCodes.add("RECURRING_NOT_QUESTIONLIKE");
+  }
+
+  if (unresolved.some((item) => isLowSignalNarrativeItem(item))) {
+    issueCodes.add("LOW_SIGNAL_UNRESOLVED");
+  }
+
+  if (suggested.some((item) => isLowSignalNarrativeItem(item))) {
+    issueCodes.add("LOW_SIGNAL_SUGGESTED_FOCUS");
+  }
+  if (
+    suggested.length === 0 ||
+    (suggested.length === 1 && suggested[0] === DEFAULT_WEEKLY_SUGGESTED_FOCUS)
+  ) {
+    issueCodes.add("EMPTY_VALID_SUGGESTED_FOCUS");
+  }
+
+  return {
+    passed: issueCodes.size === 0,
+    issueCodes: [...issueCodes],
+    highlightsCount: highlights.length,
+    recurringCount: recurring.length,
+    unresolvedCount: unresolved.length,
+    suggestedCount: suggested.length,
   };
 }
 
@@ -780,6 +1033,14 @@ export const insightSchemaHints = {
     },
     highlights: ["string"],
     recurring_questions: ["string"],
+    cross_domain_echoes: [
+      {
+        domain_a: "string",
+        domain_b: "string",
+        shared_logic: "string",
+        evidence_ids: ["number"],
+      },
+    ],
     unresolved_threads: ["string"],
     suggested_focus: ["string"],
     evidence: [{ conversation_id: "number", note: "string" }],

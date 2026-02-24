@@ -1,0 +1,38 @@
+{
+  "id": "weekly-004-fragment-rejection",
+  "type": "weekly",
+  "locale": "en",
+  "range_start": 1771629600000,
+  "range_end": 1772148000000,
+  "conversations": [
+    {"id": 401, "title": "Fragment regression review", "platform": "Claude", "created_at": 1771716000000, "snippet": "Weekly output showed single-token artifacts.", "message_count": 13},
+    {"id": 402, "title": "Filtering threshold policy", "platform": "Qwen", "created_at": 1771802400000, "snippet": "Tune CJK and ASCII narrative minimums.", "message_count": 9},
+    {"id": 403, "title": "Display consistency pass", "platform": "ChatGPT", "created_at": 1771888800000, "snippet": "Apply the same filter on read and write paths.", "message_count": 8}
+  ],
+  "gold": {
+    "required_facts": ["fragment", "filter", "threshold", "consistency"],
+    "forbidden_facts": ["single-char", "Gi"],
+    "reference": {
+      "time_range": {"start": "2026-02-21", "end": "2026-02-27", "total_conversations": 3},
+      "highlights": [
+        "Fragment rejection became a hard filter so weekly narrative sections can no longer pass single-token artifacts.",
+        "Read-path and write-path filtering now share one consistency policy to prevent old data from polluting the UI."
+      ],
+      "recurring_questions": [
+        "How strict should the narrative threshold be so that we remove noise without deleting meaningful short technical terms?"
+      ],
+      "cross_domain_echoes": [],
+      "unresolved_threads": [
+        "A finer taxonomy may still be needed to distinguish legitimate short terminology from true low-signal stubs."
+      ],
+      "suggested_focus": [
+        "Add fragment rejection cases to CI so threshold changes cannot regress silently."
+      ],
+      "evidence": [
+        {"conversation_id": 401, "note": "Reviewed screenshots and examples of fragment regressions."},
+        {"conversation_id": 402, "note": "Defined threshold boundaries and over-filtering risks."}
+      ],
+      "insufficient_data": false
+    }
+  }
+}

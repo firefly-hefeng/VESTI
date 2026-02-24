@@ -224,3 +224,30 @@ Recommendation for v1.7 stabilization:
 4. Build and gate status for this patch:
    - `pnpm -C frontend build` -> pass
    - `pnpm -C frontend eval:prompts --mode=mock --strict` -> pass
+
+## 10) Update 2026-02-24 (Weekly Digest strict alignment patch)
+
+1. Agent C input mode is now `summary_v2_only`:
+   - weekly aggregation consumes structured `conversation_summary.v2` entries as primary evidence.
+   - `conversation_summary.v1` is excluded from structured weekly aggregation input.
+
+2. Runtime Sub-3 breaker is enforced before inference:
+   - if substantive structured sample count `< 3`, weekly short-circuits with `insufficient_data=true`.
+   - strict sparse output shape:
+     - `highlights`: exactly 1 factual sentence
+     - `recurring_questions`: `[]`
+     - `cross_domain_echoes`: `[]`
+     - `unresolved_threads`: `[]`
+     - `suggested_focus`: `[]`
+     - `evidence`: `[]`
+
+3. `weekly_lite.v1` in-place compatible extension:
+   - added `cross_domain_echoes` field to output contract (empty array allowed).
+   - no schema version bump to `weekly_lite.v2`.
+   - adapter read path remains backward-compatible for historical records missing this field.
+
+4. Weekly observability fields added:
+   - `weekly_sub3_triggered`
+   - `weekly_substantive_count`
+   - `weekly_structured_count`
+   - `weekly_input_mode` (`summary_v2_only`)

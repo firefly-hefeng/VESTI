@@ -178,3 +178,265 @@ Status: implemented, validated locally, pending commit hash annotation in this m
 1. `pnpm -C frontend build` -> pass
 2. `pnpm -C frontend eval:prompts --mode=mock --strict` -> pass
 3. `node --check E:\\GT\\DEV\\vesti-proxy\\api\\chat.js` -> pass
+
+## 11) Update (2026-02-24) - Insights truncation investigation log (summary + weekly)
+
+Status: investigation completed, patch plan approved for immediate implementation.
+
+### A) Symptom snapshot
+
+1. In Insights cards, section headers show a trailing number on the far right (`2`, `3`, `5`, etc.) connected by a horizontal divider line.
+2. Summary `unresolved_threads` and `actionable_next_steps` often render as fragmented short tokens.
+3. Weekly Digest sections (`highlights`, `recurring_questions`, `unresolved_threads`, `suggested_focus`) can degrade into heavily truncated fragments.
+
+### B) Root-cause split (UI vs pipeline)
+
+1. Header trailing number is a UI rendering choice, not backend corruption.
+   - Render source: `frontend/src/sidepanel/pages/InsightsPage.tsx` (`ins-thread-sec-count`, `ins-week-sec-count`).
+2. Fragmented item texts are primarily data-pipeline quality issues, not CSS clipping.
+   - Item rendering is direct `{item}` with no line clamp in the related classes.
+   - Current schema normalization allows ultra-short strings (`min(1)` + `cleanItem(...)`), so low-signal fragments pass through.
+3. Weekly prompt quality regression exists in current prompt file.
+   - `frontend/src/lib/prompts/weeklyDigest.ts` contains mojibake/encoding-damaged prompt content and malformed interpolation text, which degrades structured output quality.
+
+### C) Immediate patch plan
+
+1. Prompt layer:
+   - Rewrite `frontend/src/lib/prompts/weeklyDigest.ts` with clean UTF-8-safe content and strict weekly_lite JSON constraints.
+   - Add explicit "no fragment items" guidance in prompt rules.
+2. Schema normalization layer:
+   - Add narrative-item quality filter in `frontend/src/lib/services/insightSchemas.ts`.
+   - Drop low-signal fragments before persisting structured arrays for unresolved/next/highlights/focus fields.
+3. Adapter display guard:
+   - Add the same low-signal filtering in `frontend/src/lib/services/insightAdapter.ts` for previously stored records.
+4. UI polish:
+   - Hide right-edge section count chips in Insights section headers.
+   - Add defensive text wrapping for unresolved/next/highlight item text classes.
+
+### D) Acceptance focus for this patch
+
+1. Header right-edge numeric artifacts no longer appear.
+2. Newly generated summary/weekly records no longer contain 1-3 char fragment items in core list sections.
+3. Existing stored records are displayed with adapter-level filtering to avoid visible fragment pollution.
+4. `pnpm -C frontend build` passes after patch.
+
+## 12) Update (2026-02-24) - Summary density gate patch (unresolved / next)
+
+Status: implemented and validated locally (`build` + `eval:prompts` pass).
+
+### A) Root-cause model
+
+1. This is not an intentional product behavior.
+2. Sparse `unresolved_threads` / `actionable_next_steps` is caused by combined effects of:
+   - Agent A compaction reducing context granularity,
+   - Agent B strict evidence-preserving output,
+   - missing semantic density gate after JSON parse success.
+3. Result: payload can be structurally valid but still semantically low-utility.
+
+### B) Runtime changes
+
+1. Prompt constraints strengthened in `frontend/src/lib/prompts/conversationSummary.ts`:
+   - unresolved/next entries must be complete short phrases,
+   - evidence-sufficient case targets `2-4` entries each,
+   - evidence-sparse case allows `1` or `[]`,
+   - no unsupported facts.
+2. `frontend/src/lib/services/insightGenerationService.ts` now adds density gate after parse:
+   - evidence scoring:
+     - `thinking_journey >= 4` => +1
+     - `key_insights >= 3` => +1
+     - `messages >= 8` => +1
+   - evidence-sufficient when score `>= 2`.
+   - if sufficient but unresolved/next `< 2`, mark `INSUFFICIENT_LIST_DENSITY` and trigger semantic repair prompt.
+3. Degraded keep strategy:
+   - if repair still sparse but valid, keep better structured candidate (instead of immediate plain-text fallback),
+   - mark degraded state for observability.
+4. `frontend/src/lib/services/insightSchemas.ts` tightened low-signal filters for summary narrative items:
+   - CJK `< 6` treated low-signal,
+   - short action stubs (e.g. very short `获取XX/确认XX`) blocked.
+
+### C) New observability fields
+
+`generateConversationSummary` logs now include:
+1. `density_gate_triggered`
+2. `density_gate_passed`
+3. `density_gate_degraded`
+4. `unresolved_count`
+5. `next_steps_count`
+6. `evidence_score`
+
+### D) Acceptance checks
+
+1. High-evidence thread (`>=8` messages, multi-turn reasoning):
+   - unresolved and next are each `2-4` complete items.
+2. Low-evidence thread:
+   - allows `1` or `[]`, but no short fragment stubs.
+3. Gate path observable:
+   - logs can show `density_gate_triggered=true` and degraded marker when applicable.
+4. No schema migration:
+   - still `conversation_summary.v2`.
+
+## 13) Update (2026-02-24) - Weekly Digest strict alignment (Agent C)
+
+Status: implemented locally (v1-compatible extension, no DB migration).
+
+### A) Runtime alignment
+
+1. Weekly aggregation is now `summary_v2_only`:
+   - Agent C input uses structured `conversation_summary.v2` entries as primary evidence.
+   - `conversation_summary.v1` is excluded from weekly aggregation input.
+2. Added strict Sub-3 circuit breaker in runtime:
+   - if substantive structured samples `< 3`, weekly generation short-circuits before inference.
+   - output sets `insufficient_data=true`.
+   - `highlights` keeps exactly one factual sentence.
+   - `recurring_questions/cross_domain_echoes/unresolved_threads/suggested_focus/evidence` are forced to `[]`.
+3. `time_range.total_conversations` now reflects substantive structured sample count.
+
+### B) Schema & compatibility
+
+1. `weekly_lite.v1` is extended in-place with `cross_domain_echoes`:
+   - no schema version bump to v2.
+2. New generations always include `cross_domain_echoes` (empty array allowed).
+3. Historical records missing `cross_domain_echoes` are read with adapter fallback `[]`.
+4. No Dexie schema migration, no historical backfill.
+
+### C) Observability fields
+
+Weekly logs now include:
+1. `weekly_sub3_triggered`
+2. `weekly_substantive_count`
+3. `weekly_structured_count`
+4. `weekly_input_mode` (`summary_v2_only`)
+
+## 14) Update (2026-02-24) - Weekly Digest regression hotfix (quality gate)
+
+Status: implemented locally as hotfix, pending final visual verification.
+
+### A) Trigger symptom
+
+1. Weekly `Next Week` displayed low-signal fragments such as `深` and `-> 深`.
+2. Weekly section headers showed trailing numeric counters that looked like UI noise.
+3. Regression surfaced after stacked changes in prompt language, normalization, and auto-summary fast path.
+
+### B) Root-cause chain
+
+1. `weeklyDigest` current prompt shifted to an English rule surface, while runtime/UI remained Chinese-first.
+2. `suggested_focus` lost non-empty fallback when `insufficient_data=false`.
+3. Weekly normalization accepted very short strings (`min(1)` + no narrative gate on weekly lists).
+4. Weekly auto-summary path used `skipCompaction`, which increased low-quality summary risk.
+
+### C) Hotfix actions
+
+1. `frontend/src/lib/prompts/weeklyDigest.ts`
+- Restored Chinese system/user/fallback prompts.
+- Kept `weekly_lite.v1` structure, `summary_v2` evidence boundary, and strict sub-3 semantics.
+- Added hard anti-fragment rule for `unresolved_threads` and `suggested_focus`.
+- Bumped prompt version to `v1.3.1-hotfix1`.
+
+2. `frontend/src/lib/services/insightSchemas.ts`
+- Weekly normalization now applies narrative filtering to:
+  - `unresolved_threads`
+  - `suggested_focus`
+- If `insufficient_data=false` and `suggested_focus` becomes empty after filtering, inject:
+  - `下周优先推进一个高价值问题并记录验证结果。`
+- `insufficient_data=true` strict empty-array behavior unchanged.
+
+3. `frontend/src/lib/services/insightAdapter.ts`
+- Display path now applies the same narrative filtering for weekly unresolved/focus fields.
+- Added display-time fallback sentence for old records when:
+  - `insufficient_data=false`
+  - filtered `suggested_focus` is empty.
+
+4. `frontend/src/lib/services/insightGenerationService.ts`
+- Weekly auto-summary keeps concurrency/attempt guardrails, but disables `skipCompaction`.
+- Added observability field:
+  - `weekly_auto_summary_mode: "full_compaction"`
+- Existing counters retained:
+  - `weekly_auto_summary_attempted`
+  - `weekly_auto_summary_generated`
+
+5. `frontend/src/sidepanel/pages/InsightsPage.tsx`
+- Removed right-side section count chips for weekly modules:
+  - `Highlights`
+  - `Recurring Questions`
+  - `Unresolved`
+  - `Next Week`
+
+### D) Rollback point
+
+1. Primary rollback unit: weekly narrative gate in `insightSchemas.ts` (if over-filtering occurs).
+2. Keep prompt Chinese restoration and UI counter removal during rollback.
+3. No schema migration involved, rollback cost remains low.
+
+## 15) Update (2026-02-24) - Weekly Digest baseline hardening (long-term)
+
+Status: implemented in `weekly_lite.v1` compatibility mode (no DB schema migration).
+
+### A) Baseline objective
+
+1. Move Weekly from “JSON parse success” to “semantic-usable quality pass”.
+2. Eliminate low-signal fragments (`中`, `Gi`, `深`, arrow stubs) by runtime gate, not only by prompt wording.
+3. Keep historical data strategy as read-time cleanup only (no bulk backfill).
+
+### B) Runtime pipeline changes
+
+1. `frontend/src/lib/prompts/weeklyDigest.ts`
+   - Fully rewritten as Chinese strict baseline prompt.
+   - Version bumped to `v1.4.0-baseline1`.
+   - Hard constraints preserved for:
+     - `weekly_lite.v1` JSON-only output
+     - evidence-bound claims
+     - strict sub-3 short-circuit
+     - anti-fragment narrative requirement
+2. `frontend/src/lib/services/insightSchemas.ts`
+   - Added weekly narrative normalization for all key lists:
+     - `highlights`
+     - `recurring_questions`
+     - `unresolved_threads`
+     - `suggested_focus`
+   - Added semantic quality validator:
+     - `validateWeeklySemanticQuality(...)`
+     - issue codes for low-signal, non-question recurring, and empty-valid fallbacks.
+3. `frontend/src/lib/services/insightGenerationService.ts`
+   - Weekly generation now enforces:
+     - parse -> semantic gate -> semantic repair (max 2 rounds) -> degrade to `insufficient_data`.
+   - No schema bump; final structure remains `weekly_lite.v1`.
+   - Added guarded prompt builder to preserve constraint blocks under token/char budget.
+   - Removed malformed mojibake fallback literals in weekly path.
+4. `frontend/src/lib/services/insightAdapter.ts`
+   - Read-path filtering now also applies to weekly `highlights` and `recurring_questions` (not only unresolved/focus).
+   - Old records without stable narrative are cleaned at display time.
+5. `frontend/src/sidepanel/pages/InsightsPage.tsx` + `frontend/src/style.css`
+   - Added lightweight sparse-card note when report is `insufficient_data` and generated in degraded/fallback status.
+
+### C) New weekly observability fields
+
+Weekly generation logs now include:
+1. `weekly_semantic_gate_passed`
+2. `weekly_semantic_issue_codes`
+3. `weekly_semantic_repair_attempt`
+4. `weekly_degraded_to_insufficient`
+5. `weekly_highlights_after_filter`
+6. `weekly_recurring_after_filter`
+7. `weekly_auto_summary_mode=full_compaction`
+8. `weekly_input_mode=summary_v2_only`
+
+### D) Eval/CI hard gate upgrade
+
+1. `scripts/eval-prompts.ts` weekly parser migrated to `weekly_lite.v1` path.
+2. Added weekly semantic metrics:
+   - `weeklyLowSignalItemRate`
+   - `weeklyMinCompleteSentenceRate`
+   - `weeklyEvidenceConsistencyRate`
+   - `weeklySemanticPassRate`
+3. `--strict` now fails if weekly semantic thresholds are not met.
+4. Added weekly gold cases:
+   - `weekly-004-fragment-rejection`
+   - `weekly-005-sub3-circuit-hardstop`
+   - `weekly-006-evidence-consistency`
+   - `weekly-007-chinese-output-stability`
+
+### E) Rollback points
+
+1. Level-1 rollback: disable weekly semantic gate and keep prompt baseline.
+2. Level-2 rollback: revert weekly generation to pre-gate path.
+3. No storage schema migration; rollback remains low-cost.

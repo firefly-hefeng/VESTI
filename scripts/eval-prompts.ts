@@ -2,6 +2,7 @@
 import path from "node:path";
 import process from "node:process";
 import { getPrompt } from "../frontend/src/lib/prompts";
+import type { WeeklyLiteReportV1 } from "../frontend/src/lib/types";
 
 type Mode = "auto" | "live" | "mock";
 type Variant = "current" | "experimental";
@@ -64,6 +65,269 @@ function pickList(v: unknown, max = 8): string[] {
     if (out.length >= max) break;
   }
   return out;
+}
+
+function isLowSignalNarrativeItem(value: string): boolean {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (!compact) return true;
+  if (/^[^A-Za-z0-9\u3400-\u9FFF]+$/.test(compact)) return true;
+  if (/^\d+\s*(\/|\\|-)\s*\d+$/.test(compact)) return true;
+  if (/^(n\/a|na|none|null|todo)$/i.test(compact)) return true;
+  if (
+    /^(获取|确认|查看|梳理|推进|优化|完善|明确|对齐|收集|验证|补充|建立|形成|评估|制定|修复|排查)[A-Za-z0-9\u3400-\u9FFF]{0,4}$/.test(
+      compact
+    )
+  ) {
+    return true;
+  }
+  if (/^(get|check|verify|confirm|fix|review|update|build)\s+\w{1,6}$/i.test(compact)) {
+    return true;
+  }
+
+  const cjkCount = countCjkChars(compact);
+  const asciiWordCount = countAsciiWords(compact);
+  const compactLen = compact.replace(/\s+/g, "").length;
+
+  if (cjkCount > 0) {
+    return cjkCount < 6;
+  }
+
+  if (asciiWordCount >= 3) return false;
+  if (asciiWordCount >= 2 && compactLen >= 8) return false;
+
+  return compactLen < 12;
+}
+
+function parseWeeklyLiteReportObject(value: unknown): {
+  success: true;
+  data: WeeklyLiteReportV1;
+} | {
+  success: false;
+  errors: string[];
+} {
+  const errors: string[] = [];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { success: false, errors: ["root must be an object"] };
+  }
+
+  const row = value as Record<string, unknown>;
+  const timeRange = row.time_range as Record<string, unknown> | undefined;
+  const start = typeof timeRange?.start === "string" ? timeRange.start.trim() : "";
+  const end = typeof timeRange?.end === "string" ? timeRange.end.trim() : "";
+  const totalConversations = Number(timeRange?.total_conversations);
+
+  if (!start) errors.push("time_range.start missing");
+  if (!end) errors.push("time_range.end missing");
+  if (!Number.isFinite(totalConversations) || totalConversations < 0) {
+    errors.push("time_range.total_conversations invalid");
+  }
+
+  const highlights = pickList(row.highlights, 8);
+  const recurringQuestions = pickList(row.recurring_questions, 8);
+  const unresolvedThreads = pickList(row.unresolved_threads, 8);
+  const suggestedFocus = pickList(row.suggested_focus, 8);
+  if (!highlights.length) errors.push("highlights missing");
+
+  const crossDomainRaw = Array.isArray(row.cross_domain_echoes)
+    ? row.cross_domain_echoes
+    : [];
+  const crossDomainEchoes = crossDomainRaw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const echo = item as Record<string, unknown>;
+      const domainA = typeof echo.domain_a === "string" ? echo.domain_a.trim() : "";
+      const domainB = typeof echo.domain_b === "string" ? echo.domain_b.trim() : "";
+      const sharedLogic =
+        typeof echo.shared_logic === "string" ? echo.shared_logic.trim() : "";
+      const evidenceIds = Array.isArray(echo.evidence_ids)
+        ? echo.evidence_ids
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id >= 0)
+        : [];
+      if (!domainA || !domainB || !sharedLogic) return null;
+      return {
+        domain_a: domainA,
+        domain_b: domainB,
+        shared_logic: sharedLogic,
+        evidence_ids: evidenceIds,
+      };
+    })
+    .filter(
+      (
+        item
+      ): item is {
+        domain_a: string;
+        domain_b: string;
+        shared_logic: string;
+        evidence_ids: number[];
+      } => item !== null
+    )
+    .slice(0, 4);
+
+  const evidenceRaw = Array.isArray(row.evidence) ? row.evidence : [];
+  const evidence = evidenceRaw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const value = item as Record<string, unknown>;
+      const conversationId = Number(value.conversation_id);
+      const note = typeof value.note === "string" ? value.note.trim() : "";
+      if (!Number.isInteger(conversationId) || conversationId < 0 || !note) return null;
+      return { conversation_id: conversationId, note };
+    })
+    .filter(
+      (item): item is { conversation_id: number; note: string } => item !== null
+    )
+    .slice(0, 10);
+
+  if (typeof row.insufficient_data !== "boolean") {
+    errors.push("insufficient_data missing");
+  }
+
+  if (errors.length) {
+    return { success: false, errors };
+  }
+
+  return {
+    success: true,
+    data: {
+      time_range: {
+        start,
+        end,
+        total_conversations: Math.floor(totalConversations),
+      },
+      highlights,
+      recurring_questions: recurringQuestions,
+      cross_domain_echoes: crossDomainEchoes,
+      unresolved_threads: unresolvedThreads,
+      suggested_focus: suggestedFocus,
+      evidence,
+      insufficient_data: Boolean(row.insufficient_data),
+    },
+  };
+}
+
+function validateWeeklySemanticQuality(report: WeeklyLiteReportV1): {
+  passed: boolean;
+  issueCodes: string[];
+} {
+  if (report.insufficient_data) {
+    return { passed: true, issueCodes: [] };
+  }
+
+  const issueCodes = new Set<string>();
+  const recurringNotQuestionLike = report.recurring_questions.some(
+    (item) => !/[?？]$/.test(item.trim()) && !/^(为什么|为何|如何|怎么|是否|能否|what|why|how)/i.test(item.trim())
+  );
+
+  if (!report.highlights.length) issueCodes.add("EMPTY_VALID_HIGHLIGHTS");
+  if (report.highlights.some((item) => isLowSignalNarrativeItem(item))) {
+    issueCodes.add("LOW_SIGNAL_HIGHLIGHT");
+  }
+  if (report.recurring_questions.some((item) => isLowSignalNarrativeItem(item))) {
+    issueCodes.add("LOW_SIGNAL_RECURRING");
+  }
+  if (recurringNotQuestionLike) issueCodes.add("RECURRING_NOT_QUESTIONLIKE");
+  if (report.unresolved_threads.some((item) => isLowSignalNarrativeItem(item))) {
+    issueCodes.add("LOW_SIGNAL_UNRESOLVED");
+  }
+  if (report.suggested_focus.some((item) => isLowSignalNarrativeItem(item))) {
+    issueCodes.add("LOW_SIGNAL_SUGGESTED_FOCUS");
+  }
+  if (!report.suggested_focus.length) {
+    issueCodes.add("EMPTY_VALID_SUGGESTED_FOCUS");
+  }
+
+  return {
+    passed: issueCodes.size === 0,
+    issueCodes: [...issueCodes],
+  };
+}
+
+function countCjkChars(value: string): number {
+  const matches = value.match(/[\u3400-\u9FFF]/g);
+  return matches ? matches.length : 0;
+}
+
+function countAsciiWords(value: string): number {
+  const matches = value.match(/[A-Za-z0-9][A-Za-z0-9+/_\-.]*/g);
+  return matches ? matches.length : 0;
+}
+
+function isCompleteSentence(value: string): boolean {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text) return false;
+  if (isLowSignalNarrativeItem(text)) return false;
+  if (/[。！？.!?]$/.test(text)) return true;
+
+  const cjk = countCjkChars(text);
+  if (cjk >= 10) return true;
+
+  const asciiWords = countAsciiWords(text);
+  return asciiWords >= 5;
+}
+
+function toWeeklyLiteText(report: WeeklyLiteReportV1): string {
+  return [
+    ...report.highlights,
+    ...report.recurring_questions,
+    ...report.unresolved_threads,
+    ...report.suggested_focus,
+    ...report.evidence.map((item) => item.note),
+  ].join(" ");
+}
+
+function evaluateWeeklyCaseSemantics(
+  report: WeeklyLiteReportV1,
+  knownConversationIds: Set<number>
+): {
+  lowSignalItemRate: number;
+  minCompleteSentenceRate: number;
+  evidenceConsistencyRate: number;
+  semanticPassed: boolean;
+  semanticIssueCodes: string[];
+} {
+  const quality = validateWeeklySemanticQuality(report);
+  if (report.insufficient_data) {
+    return {
+      lowSignalItemRate: 0,
+      minCompleteSentenceRate: 100,
+      evidenceConsistencyRate: 100,
+      semanticPassed: quality.passed,
+      semanticIssueCodes: quality.issueCodes,
+    };
+  }
+
+  const narrativeItems = [
+    ...report.highlights,
+    ...report.recurring_questions,
+    ...report.unresolved_threads,
+    ...report.suggested_focus,
+  ].filter((item) => item.trim().length > 0);
+
+  const lowSignalCount = narrativeItems.filter((item) =>
+    isLowSignalNarrativeItem(item)
+  ).length;
+  const completeCount = narrativeItems.filter((item) =>
+    isCompleteSentence(item)
+  ).length;
+  const totalNarratives = Math.max(narrativeItems.length, 1);
+
+  const validEvidenceCount = report.evidence.filter((item) =>
+    knownConversationIds.has(item.conversation_id)
+  ).length;
+  const evidenceConsistencyRate = report.insufficient_data
+    ? 100
+    : report.evidence.length > 0
+      ? (validEvidenceCount / report.evidence.length) * 100
+      : 0;
+
+  return {
+    lowSignalItemRate: (lowSignalCount / totalNarratives) * 100,
+    minCompleteSentenceRate: (completeCount / totalNarratives) * 100,
+    evidenceConsistencyRate,
+    semanticPassed: quality.passed,
+    semanticIssueCodes: quality.issueCodes,
+  };
 }
 
 function removeTrailingCommas(input: string): string {
@@ -290,28 +554,17 @@ function parseStructured(kind: "conversation" | "weekly", raw: string) {
       };
     }
 
-    const period = typeof o.period_title === "string" ? o.period_title.trim() : "";
-    const themes = pickList((o as any).main_themes ?? (o as any).themes, 8);
-    const takeaways = pickList((o as any).key_takeaways ?? (o as any).key_insights, 8);
-
-    const errors: string[] = [];
-    if (!period) errors.push("period_title missing");
-    if (!themes.length) errors.push("main_themes missing");
-    if (!takeaways.length) errors.push("key_takeaways missing");
-
-    if (errors.length) {
-      return { data: null, errors };
+    const parsed = parseWeeklyLiteReportObject(o);
+    if (parsed.success) {
+      return {
+        data: parsed.data,
+        errors: [] as string[],
+      };
     }
 
     return {
-      data: {
-        period_title: period.slice(0, 120),
-        main_themes: themes,
-        key_takeaways: takeaways,
-        action_items: pickList((o as any).action_items ?? (o as any).next_steps ?? (o as any).todos, 8),
-        tech_stack_detected: pickList((o as any).tech_stack_detected ?? (o as any).tags ?? (o as any).tech_stack, 8),
-      },
-      errors: [] as string[],
+      data: null,
+      errors: (parsed as { errors?: string[] }).errors ?? ["WEEKLY_PARSE_FAILED"],
     };
   } catch (e) {
     return { data: null, errors: [String((e as Error).message || e)] };
@@ -412,6 +665,9 @@ function textFromStructured(s: any, raw: string): string {
   if (s.topic_title) {
     return [s.topic_title, ...(s.key_takeaways || []), ...(s.action_items || []), ...(s.tech_stack_detected || [])].join(" ");
   }
+  if (s.time_range && Array.isArray(s.highlights)) {
+    return toWeeklyLiteText(s as WeeklyLiteReportV1);
+  }
   return [
     s.period_title,
     ...(s.main_themes || []),
@@ -497,7 +753,7 @@ async function main() {
       if (kind === "conversation") {
         ref.key_takeaways = [...(ref.key_takeaways || []), ...missing];
       } else {
-        ref.key_takeaways = [...(ref.key_takeaways || []), ...missing];
+        ref.highlights = [...(ref.highlights || []), ...missing];
       }
       raw = JSON.stringify(ref);
       parsed = ref;
@@ -548,7 +804,7 @@ async function main() {
         const repair =
           kind === "conversation"
             ? `Fix as JSON with keys topic_title,key_takeaways,sentiment,action_items,tech_stack_detected. Errors: ${v1.errors.join("; ")}\n${raw}`
-            : `Fix as JSON with keys period_title,main_themes,key_takeaways,action_items,tech_stack_detected. Errors: ${v1.errors.join("; ")}\n${raw}`;
+            : `Fix as weekly_lite.v1 JSON with keys time_range,highlights,recurring_questions,cross_domain_echoes,unresolved_threads,suggested_focus,evidence,insufficient_data. Errors: ${v1.errors.join("; ")}\n${raw}`;
         const p2 = await callProvider(cfg!, prompt.system, repair, true);
         mode = p2.mode;
         raw = p2.content;
@@ -590,8 +846,49 @@ async function main() {
     const coverage = required.length ? matched.length / required.length : 1;
     const hallucination = forbidden.length ? triggered.length / forbidden.length : 0;
     const formatOk = !!parsed;
-    const hasActions = parsed?.action_items?.length ? 1 : 0;
-    let subjective = 2 + (formatOk ? 1 : 0) + coverage * 1.5 + (hallucination === 0 ? 0.8 : -Math.min(1.2, hallucination * 2)) + (hasActions ? 0.3 : 0) + (mode === "fallback_text" ? -0.4 : 0);
+    const hasActions =
+      kind === "conversation"
+        ? parsed?.action_items?.length
+          ? 1
+          : 0
+        : parsed?.suggested_focus?.length
+          ? 1
+          : 0;
+
+    let weeklyLowSignalItemRate = 0;
+    let weeklyMinCompleteSentenceRate = 100;
+    let weeklyEvidenceConsistencyRate = 100;
+    let weeklySemanticPassed = true;
+    let weeklySemanticIssueCodes: string[] = [];
+
+    if (kind === "weekly" && parsed) {
+      const knownConversationIds = new Set<number>(
+        (c.conversations || []).map((item: any) => Number(item.id))
+      );
+      const weeklyEval = evaluateWeeklyCaseSemantics(
+        parsed as WeeklyLiteReportV1,
+        knownConversationIds
+      );
+      weeklyLowSignalItemRate = weeklyEval.lowSignalItemRate;
+      weeklyMinCompleteSentenceRate = weeklyEval.minCompleteSentenceRate;
+      weeklyEvidenceConsistencyRate = weeklyEval.evidenceConsistencyRate;
+      weeklySemanticPassed = weeklyEval.semanticPassed;
+      weeklySemanticIssueCodes = weeklyEval.semanticIssueCodes;
+    }
+
+    let subjective =
+      2 +
+      (formatOk ? 1 : 0) +
+      coverage * 1.5 +
+      (hallucination === 0 ? 0.8 : -Math.min(1.2, hallucination * 2)) +
+      (hasActions ? 0.3 : 0) +
+      (mode === "fallback_text" ? -0.4 : 0);
+    if (kind === "weekly") {
+      subjective += weeklySemanticPassed ? 0.3 : -0.6;
+      subjective += Math.max(-0.5, (weeklyMinCompleteSentenceRate - 80) * 0.005);
+      subjective += Math.max(-0.6, (20 - weeklyLowSignalItemRate) * 0.01);
+      subjective += Math.max(-0.4, (weeklyEvidenceConsistencyRate - 70) * 0.004);
+    }
     subjective = Math.max(1, Math.min(5, subjective));
 
     scored.push({
@@ -608,6 +905,15 @@ async function main() {
       matchedRequiredFacts: matched,
       missedRequiredFacts: missed,
       triggeredForbiddenFacts: triggered,
+      weeklyLowSignalItemRate:
+        kind === "weekly" ? round2(weeklyLowSignalItemRate) : undefined,
+      weeklyMinCompleteSentenceRate:
+        kind === "weekly" ? round2(weeklyMinCompleteSentenceRate) : undefined,
+      weeklyEvidenceConsistencyRate:
+        kind === "weekly" ? round2(weeklyEvidenceConsistencyRate) : undefined,
+      weeklySemanticPassed: kind === "weekly" ? weeklySemanticPassed : undefined,
+      weeklySemanticIssueCodes:
+        kind === "weekly" ? weeklySemanticIssueCodes : undefined,
     });
 
     if (cli.caseDelayMs > 0) {
@@ -616,18 +922,77 @@ async function main() {
   }
 
   const total = scored.length || 1;
+  const weeklyCases = scored.filter((x) => x.type === "weekly");
+  const weeklyTotal = weeklyCases.length;
+  const weeklyMetrics =
+    weeklyTotal > 0
+      ? {
+          weeklyLowSignalItemRate: round2(
+            weeklyCases.reduce((sum, item) => sum + (item.weeklyLowSignalItemRate ?? 0), 0) /
+              weeklyTotal
+          ),
+          weeklyMinCompleteSentenceRate: round2(
+            weeklyCases.reduce(
+              (sum, item) => sum + (item.weeklyMinCompleteSentenceRate ?? 0),
+              0
+            ) / weeklyTotal
+          ),
+          weeklyEvidenceConsistencyRate: round2(
+            weeklyCases.reduce(
+              (sum, item) => sum + (item.weeklyEvidenceConsistencyRate ?? 0),
+              0
+            ) / weeklyTotal
+          ),
+          weeklySemanticPassRate: round2(
+            (weeklyCases.filter((item) => item.weeklySemanticPassed).length /
+              weeklyTotal) *
+              100
+          ),
+        }
+      : {
+          weeklyLowSignalItemRate: 0,
+          weeklyMinCompleteSentenceRate: 100,
+          weeklyEvidenceConsistencyRate: 100,
+          weeklySemanticPassRate: 100,
+        };
   const metrics = {
     formatComplianceRate: round2((scored.filter((x) => x.formatCompliant).length / total) * 100),
     informationCoverageRate: round2((scored.reduce((s, x) => s + x.coverageRate, 0) / total) * 100),
     hallucinationRate: round2((scored.reduce((s, x) => s + x.hallucinationRate, 0) / total) * 100),
     userSatisfaction: round2(scored.reduce((s, x) => s + x.subjectiveScore, 0) / total),
+    ...weeklyMetrics,
   };
 
+  const weeklyThresholds = {
+    weeklyLowSignalItemRate: Number(thresholds.weeklyLowSignalItemRate ?? 12),
+    weeklyMinCompleteSentenceRate: Number(
+      thresholds.weeklyMinCompleteSentenceRate ?? 82
+    ),
+    weeklyEvidenceConsistencyRate: Number(
+      thresholds.weeklyEvidenceConsistencyRate ?? 85
+    ),
+    weeklySemanticPassRate: Number(thresholds.weeklySemanticPassRate ?? 100),
+  };
+  const reportThresholds = { ...thresholds, ...weeklyThresholds };
+
   const gate = {
-    formatComplianceRate: metrics.formatComplianceRate >= thresholds.formatComplianceRate,
-    informationCoverageRate: metrics.informationCoverageRate >= thresholds.informationCoverageRate,
-    hallucinationRate: metrics.hallucinationRate <= thresholds.hallucinationRate,
-    userSatisfaction: metrics.userSatisfaction >= thresholds.userSatisfaction,
+    formatComplianceRate:
+      metrics.formatComplianceRate >= reportThresholds.formatComplianceRate,
+    informationCoverageRate:
+      metrics.informationCoverageRate >= reportThresholds.informationCoverageRate,
+    hallucinationRate:
+      metrics.hallucinationRate <= reportThresholds.hallucinationRate,
+    userSatisfaction: metrics.userSatisfaction >= reportThresholds.userSatisfaction,
+    weeklyLowSignalItemRate:
+      metrics.weeklyLowSignalItemRate <= reportThresholds.weeklyLowSignalItemRate,
+    weeklyMinCompleteSentenceRate:
+      metrics.weeklyMinCompleteSentenceRate >=
+      reportThresholds.weeklyMinCompleteSentenceRate,
+    weeklyEvidenceConsistencyRate:
+      metrics.weeklyEvidenceConsistencyRate >=
+      reportThresholds.weeklyEvidenceConsistencyRate,
+    weeklySemanticPassRate:
+      metrics.weeklySemanticPassRate >= reportThresholds.weeklySemanticPassRate,
   };
   const allPassed = Object.values(gate).every(Boolean);
 
@@ -641,7 +1006,7 @@ async function main() {
       weekly: scored.filter((x) => x.type === "weekly").length,
     },
     metrics,
-    thresholds,
+    thresholds: reportThresholds,
     gate: { ...gate, allPassed },
     cases: scored,
   };
@@ -667,7 +1032,16 @@ async function main() {
     lines.push(`- Mode: ${report.mode}`);
     lines.push(`- Variant: ${report.variant}`, "");
     lines.push("| Metric | Baseline | Latest | Delta |", "| --- | ---: | ---: | ---: |");
-    for (const key of ["formatComplianceRate", "informationCoverageRate", "hallucinationRate", "userSatisfaction"]) {
+    for (const key of [
+      "formatComplianceRate",
+      "informationCoverageRate",
+      "hallucinationRate",
+      "userSatisfaction",
+      "weeklyLowSignalItemRate",
+      "weeklyMinCompleteSentenceRate",
+      "weeklyEvidenceConsistencyRate",
+      "weeklySemanticPassRate",
+    ]) {
       const b = Number(base.metrics[key]);
       const l = Number(report.metrics[key]);
       const d = l - b;
@@ -678,13 +1052,17 @@ async function main() {
     lines.push(`- informationCoverageRate: ${report.gate.informationCoverageRate ? "PASS" : "FAIL"}`);
     lines.push(`- hallucinationRate: ${report.gate.hallucinationRate ? "PASS" : "FAIL"}`);
     lines.push(`- userSatisfaction: ${report.gate.userSatisfaction ? "PASS" : "FAIL"}`);
+    lines.push(`- weeklyLowSignalItemRate: ${report.gate.weeklyLowSignalItemRate ? "PASS" : "FAIL"}`);
+    lines.push(`- weeklyMinCompleteSentenceRate: ${report.gate.weeklyMinCompleteSentenceRate ? "PASS" : "FAIL"}`);
+    lines.push(`- weeklyEvidenceConsistencyRate: ${report.gate.weeklyEvidenceConsistencyRate ? "PASS" : "FAIL"}`);
+    lines.push(`- weeklySemanticPassRate: ${report.gate.weeklySemanticPassRate ? "PASS" : "FAIL"}`);
     lines.push(`- overall: ${report.gate.allPassed ? "PASS" : "FAIL"}`);
   }
   fs.writeFileSync(diff, `${lines.join("\n")}\n`, "utf-8");
 
   console.log(`[eval:prompts] mode=${runMode} variant=${cli.variant} total=${report.datasetSize.total}`);
   console.log(
-    `[eval:prompts] metrics format=${metrics.formatComplianceRate} coverage=${metrics.informationCoverageRate} hallucination=${metrics.hallucinationRate} satisfaction=${metrics.userSatisfaction}`
+    `[eval:prompts] metrics format=${metrics.formatComplianceRate} coverage=${metrics.informationCoverageRate} hallucination=${metrics.hallucinationRate} satisfaction=${metrics.userSatisfaction} weeklyLowSignal=${metrics.weeklyLowSignalItemRate} weeklyComplete=${metrics.weeklyMinCompleteSentenceRate} weeklyEvidence=${metrics.weeklyEvidenceConsistencyRate} weeklySemanticPass=${metrics.weeklySemanticPassRate}`
   );
   console.log(`[eval:prompts] gate=${report.gate.allPassed ? "PASS" : "FAIL"}`);
   console.log(`[eval:prompts] latest=${latest}`);

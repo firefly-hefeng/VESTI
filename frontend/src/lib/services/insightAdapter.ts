@@ -11,7 +11,11 @@ import type {
   ChatSummaryData,
   WeeklySummaryData,
 } from "../types/insightsPresentation";
-import { normalizeConversationSummaryV2Legacy } from "./insightSchemas";
+import {
+  isLowSignalNarrativeItem,
+  normalizeConversationSummaryV2Legacy,
+  normalizeWeeklyNarrativeList,
+} from "./insightSchemas";
 
 interface WeeklyCrossDomainEcho {
   domain_a: string;
@@ -30,6 +34,7 @@ const TECH_KEYWORDS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /modelscope|qwen|deepseek/i, label: "Model Inference" },
   { pattern: /prompt|schema/i, label: "Prompt Engineering" },
 ];
+const DEFAULT_WEEKLY_SUGGESTED_FOCUS = "下周优先推进一个高价值问题并记录验证结果。";
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -47,6 +52,12 @@ function dedupe(items: string[]): string[] {
     output.push(normalized);
   }
   return output;
+}
+
+function dedupeNarrative(items: string[], limit: number): string[] {
+  return dedupe(items)
+    .filter((item) => !isLowSignalNarrativeItem(item))
+    .slice(0, limit);
 }
 
 function dedupeJourney(
@@ -289,7 +300,7 @@ function toChatSummaryDataFromV2(
     core_question: normalizeText(structured.core_question),
     thinking_journey: toJourneyFromV2(safeJourney),
     key_insights: toInsightObjects(safeInsights),
-    unresolved_threads: dedupe(safeUnresolved).slice(0, 6),
+    unresolved_threads: dedupeNarrative(safeUnresolved, 6),
     meta_observations: {
       thinking_style:
         normalizeText(String(safeMeta.thinking_style ?? "")) ||
@@ -299,7 +310,7 @@ function toChatSummaryDataFromV2(
         "谨慎而带着好奇，持续验证关键假设。",
       depth_level: normalizeDepthLevel(safeMeta.depth_level),
     },
-    actionable_next_steps: dedupe(safeNextSteps).slice(0, 6),
+    actionable_next_steps: dedupeNarrative(safeNextSteps, 6),
     plain_text: summary.content,
   };
 }
@@ -424,6 +435,30 @@ export function toWeeklySummaryData(report: WeeklyReportRecord): WeeklySummaryDa
     const crossDomainEchoes = normalizeCrossDomainEchoes(
       (structured as unknown as { cross_domain_echoes?: unknown }).cross_domain_echoes
     );
+    const highlights = normalizeWeeklyNarrativeList(
+      "highlights",
+      structured.highlights,
+      6
+    );
+    const recurring = normalizeWeeklyNarrativeList(
+      "recurring_questions",
+      structured.recurring_questions,
+      4
+    );
+    const unresolved = normalizeWeeklyNarrativeList(
+      "unresolved_threads",
+      structured.unresolved_threads,
+      6
+    );
+    const suggested = normalizeWeeklyNarrativeList(
+      "suggested_focus",
+      structured.suggested_focus,
+      6
+    );
+    const suggestedFocus =
+      !structured.insufficient_data && suggested.length === 0
+        ? [DEFAULT_WEEKLY_SUGGESTED_FOCUS]
+        : suggested;
 
     return {
       meta: {
@@ -433,13 +468,14 @@ export function toWeeklySummaryData(report: WeeklyReportRecord): WeeklySummaryDa
         fallback: report.status === "fallback",
         range_label: rangeLabel,
       },
-      highlights: dedupe(structured.highlights).slice(0, 6),
-      recurring_questions: dedupe(structured.recurring_questions).slice(0, 4),
-      ...(crossDomainEchoes.length > 0
-        ? { cross_domain_echoes: crossDomainEchoes }
-        : {}),
-      unresolved_threads: dedupe(structured.unresolved_threads).slice(0, 6),
-      suggested_focus: dedupe(structured.suggested_focus).slice(0, 6),
+      highlights:
+        highlights.length > 0
+          ? highlights
+          : dedupe(structured.highlights).slice(0, 1),
+      recurring_questions: recurring,
+      cross_domain_echoes: crossDomainEchoes,
+      unresolved_threads: unresolved,
+      suggested_focus: suggestedFocus,
       evidence: (structured.evidence || []).slice(0, 8),
       insufficient_data: structured.insufficient_data,
       plain_text: report.content,
@@ -449,7 +485,18 @@ export function toWeeklySummaryData(report: WeeklyReportRecord): WeeklySummaryDa
   if (isWeeklyReportV1(structured)) {
     const themes = dedupe(structured.main_themes).slice(0, 6);
     const keyInsights = dedupe(structured.key_takeaways).slice(0, 8);
-    const actionItems = dedupe(structured.action_items ?? []).slice(0, 6);
+    const highlights = normalizeWeeklyNarrativeList(
+      "highlights",
+      keyInsights.length ? keyInsights : themes,
+      6
+    );
+    const actionItems = dedupeNarrative(structured.action_items ?? [], 6);
+    const unresolved = dedupeNarrative(
+      inferUnresolved([...themes, ...keyInsights]),
+      6
+    );
+    const suggestedFocus =
+      actionItems.length > 0 ? actionItems : [DEFAULT_WEEKLY_SUGGESTED_FOCUS];
 
     return {
       meta: {
@@ -462,10 +509,14 @@ export function toWeeklySummaryData(report: WeeklyReportRecord): WeeklySummaryDa
         fallback: report.status === "fallback",
         range_label: rangeLabel,
       },
-      highlights: keyInsights.length ? keyInsights : themes,
+      highlights:
+        highlights.length > 0
+          ? highlights
+          : [keyInsights[0] ?? themes[0] ?? "本周形成了可复用的阶段性结论。"],
       recurring_questions: [],
-      unresolved_threads: inferUnresolved([...themes, ...keyInsights]),
-      suggested_focus: actionItems,
+      cross_domain_echoes: [],
+      unresolved_threads: unresolved,
+      suggested_focus: suggestedFocus,
       evidence: [],
       insufficient_data: false,
       plain_text: report.content,
@@ -473,6 +524,11 @@ export function toWeeklySummaryData(report: WeeklyReportRecord): WeeklySummaryDa
   }
 
   const highlights = fallbackLines.slice(0, 5);
+  const filteredFallbackHighlights = dedupeNarrative(highlights, 5);
+  const fallbackRecurring = dedupeNarrative(
+    fallbackLines.filter((line) => /repeat|recurr|question|why|how/i.test(line)).slice(0, 3),
+    3
+  );
 
   return {
     meta: {
@@ -482,14 +538,14 @@ export function toWeeklySummaryData(report: WeeklyReportRecord): WeeklySummaryDa
       fallback: true,
       range_label: rangeLabel,
     },
-    highlights,
-    recurring_questions: fallbackLines
-      .filter((line) => /repeat|recurr|question|why|how/i.test(line))
-      .slice(0, 3),
-    unresolved_threads: inferUnresolved(fallbackLines),
-    suggested_focus: fallbackLines
-      .filter((line) => /next|action|focus|priority|todo|follow-up/i.test(line))
-      .slice(0, 4),
+    highlights:
+      filteredFallbackHighlights.length > 0
+        ? filteredFallbackHighlights
+        : highlights.slice(0, 1),
+    recurring_questions: fallbackRecurring,
+    cross_domain_echoes: [],
+    unresolved_threads: dedupeNarrative(inferUnresolved(fallbackLines), 6),
+    suggested_focus: [],
     evidence: [],
     insufficient_data: true,
     plain_text: report.content,

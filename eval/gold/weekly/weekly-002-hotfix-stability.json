@@ -1,67 +1,38 @@
 {
   "id": "weekly-002-hotfix-stability",
   "type": "weekly",
-  "locale": "zh",
+  "locale": "en",
   "range_start": 1770848400000,
   "range_end": 1771366800000,
   "conversations": [
-    {
-      "id": 201,
-      "title": "Timeout after 4000ms ??",
-      "platform": "Claude",
-      "created_at": 1770848400000,
-      "snippet": "test ??? generate ???????????????",
-      "message_count": 11
-    },
-    {
-      "id": 202,
-      "title": "Markdown ?????",
-      "platform": "ChatGPT",
-      "created_at": 1770934800000,
-      "snippet": "sanitizeSummaryText ?? ** ## ????",
-      "message_count": 8
-    },
-    {
-      "id": 203,
-      "title": "v1.0.1 ????",
-      "platform": "Claude",
-      "created_at": 1771021200000,
-      "snippet": "fix ?????? patch tag??? release ????",
-      "message_count": 7
-    }
+    {"id": 201, "title": "Latency and retry policy", "platform": "Claude", "created_at": 1770848400000, "snippet": "Evaluate 20-40 second quality-first budget.", "message_count": 11},
+    {"id": 202, "title": "Model access overflow bug", "platform": "ChatGPT", "created_at": 1770934800000, "snippet": "Long helper text leaked into settings UI.", "message_count": 8},
+    {"id": 203, "title": "Weekly hotfix stability", "platform": "Claude", "created_at": 1771021200000, "snippet": "Restore Chinese prompt constraints and remove noisy counters.", "message_count": 7}
   ],
   "gold": {
-    "required_facts": [
-      "timeout",
-      "v1.0.1",
-      "sanitize",
-      "hotfix"
-    ],
-    "forbidden_facts": [
-      "microservice",
-      "terraform"
-    ],
+    "required_facts": ["Chinese prompt", "quality gate", "latency", "hotfix"],
+    "forbidden_facts": ["Spark", "Hadoop"],
     "reference": {
-      "period_title": "??? Hotfix ??",
-      "main_themes": [
-        "Generate ?????????",
-        "Markdown ???????",
-        "v1.0.1 patch ????"
+      "time_range": {"start": "2026-02-13", "end": "2026-02-19", "total_conversations": 3},
+      "highlights": [
+        "The hotfix restored Chinese prompt behavior and reinforced the weekly quality gate against fragment leakage.",
+        "A quality-first latency policy was accepted to keep outputs readable and consistent during retries."
       ],
-      "key_takeaways": [
-        "?????????????????",
-        "sanitize ???????????",
-        "hotfix ??? fix ??? patch tag ???"
+      "recurring_questions": [
+        "How can we keep latency bounded while still allowing enough repair rounds for stable weekly quality?"
       ],
-      "action_items": [
-        "??? fallback ???",
-        "?? RC ?? checklist?"
+      "cross_domain_echoes": [],
+      "unresolved_threads": [
+        "The settings state machine still needs stronger guards to prevent test response text from leaking into UI fields."
       ],
-      "tech_stack_detected": [
-        "ModelScope",
-        "Git",
-        "SemVer"
-      ]
+      "suggested_focus": [
+        "Add stress tests for model access state transitions and verify no prompt payload can render in settings widgets."
+      ],
+      "evidence": [
+        {"conversation_id": 202, "note": "Captured the settings overflow symptom and reproduction path."},
+        {"conversation_id": 203, "note": "Recorded the weekly hotfix actions and validation checks."}
+      ],
+      "insufficient_data": false
     }
   }
 }

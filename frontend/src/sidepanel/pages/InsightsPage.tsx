@@ -416,6 +416,8 @@ export function InsightsPage({ conversation, refreshToken }: InsightsPageProps) 
   const weeklyCrossDomainEchoes = weeklyData?.cross_domain_echoes ?? [];
   const weeklyUnresolvedItems = weeklyData?.unresolved_threads ?? [];
   const weeklyNextWeekItems = weeklyData?.suggested_focus ?? [];
+  const weeklyQualityDegraded =
+    Boolean(weeklyData?.insufficient_data) && weeklyReport?.status === "fallback";
 
   useEffect(() => {
     weeklyStableRef.current = weeklyStableState;
@@ -1031,7 +1033,6 @@ export function InsightsPage({ conversation, refreshToken }: InsightsPageProps) 
               <div className="ins-week-sec-head">
                 <span className="ins-week-sec-label">Highlights</span>
                 <span className="ins-week-sec-line" />
-                <span className="ins-week-sec-count">{weeklyHighlightItems.length}</span>
               </div>
               <div className="ins-week-highlight-list">
                 {weeklyHighlightItems.map((item, index) => (
@@ -1048,7 +1049,6 @@ export function InsightsPage({ conversation, refreshToken }: InsightsPageProps) 
               <div className="ins-week-sec-head">
                 <span className="ins-week-sec-label">Recurring Questions</span>
                 <span className="ins-week-sec-line" />
-                <span className="ins-week-sec-count">{weeklyRecurringItems.length}</span>
               </div>
               <div className="ins-week-recurring-list">
                 {weeklyRecurringItems.map((item, index) => (
@@ -1097,7 +1097,6 @@ export function InsightsPage({ conversation, refreshToken }: InsightsPageProps) 
               <div className="ins-week-sec-head">
                 <span className="ins-week-sec-label">Unresolved</span>
                 <span className="ins-week-sec-line" />
-                <span className="ins-week-sec-count">{weeklyUnresolvedItems.length}</span>
               </div>
               <div className="ins-week-unresolved-list">
                 {weeklyUnresolvedItems.map((item, index) => (
@@ -1115,7 +1114,6 @@ export function InsightsPage({ conversation, refreshToken }: InsightsPageProps) 
               <div className="ins-week-sec-head">
                 <span className="ins-week-sec-label">Next Week</span>
                 <span className="ins-week-sec-line" />
-                <span className="ins-week-sec-count">{weeklyNextWeekItems.length}</span>
               </div>
               <div className="ins-week-focus-list">
                 {weeklyNextWeekItems.map((item, index) => (
@@ -1176,6 +1174,12 @@ export function InsightsPage({ conversation, refreshToken }: InsightsPageProps) 
             This week has fewer than 3 substantial threads. Weekly Digest will resume
             automatically when enough data is captured.
           </p>
+          {weeklyQualityDegraded && (
+            <p className="ins-week-quality-note">
+              Structured output was downgraded by semantic quality gate to avoid
+              low-signal fragments.
+            </p>
+          )}
         </div>
 
         <button
