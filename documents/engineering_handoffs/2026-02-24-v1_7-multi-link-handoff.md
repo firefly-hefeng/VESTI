@@ -440,3 +440,119 @@ Weekly generation logs now include:
 1. Level-1 rollback: disable weekly semantic gate and keep prompt baseline.
 2. Level-2 rollback: revert weekly generation to pre-gate path.
 3. No storage schema migration; rollback remains low-cost.
+
+## 16) Update (2026-02-24) - Weekly semantic gate severity profile (Hackathon Lenient)
+
+Status: implemented, schema unchanged (`weekly_lite.v1`).
+
+### A) Why this update
+
+1. User-visible issue: weekly could downgrade to sparse even when `substantive summaries >= 3`.
+2. Root cause: weekly semantic gate treated any issue code as hard failure.
+3. Effect: warning-grade issues (for example suggested-focus sparsity) could trigger full degrade.
+
+### B) Runtime policy change
+
+1. Semantic issues are now split into severity levels:
+   - hard:
+     - `LOW_SIGNAL_HIGHLIGHT`
+   - warning:
+     - `EMPTY_VALID_HIGHLIGHTS`
+     - `LOW_SIGNAL_RECURRING`
+     - `RECURRING_NOT_QUESTIONLIKE`
+     - `LOW_SIGNAL_UNRESOLVED`
+     - `LOW_SIGNAL_SUGGESTED_FOCUS`
+     - `EMPTY_VALID_SUGGESTED_FOCUS`
+2. `validateWeeklySemanticQuality(...)` passes when hard issue count is zero.
+3. Warning-only outputs are allowed to pass and persist (no forced sparse degrade).
+4. Repair loop is still used for hard failures or parse/schema errors.
+5. Final degrade to `insufficient_data=true` now requires unresolved hard failures (or parse/schema failure).
+6. `LOW_SIGNAL_HIGHLIGHT` now follows a stricter signal test:
+   - fail only when there is no high-signal highlight item at all.
+7. Weekly normalization now injects an evidence-backed highlight fallback when:
+   - `insufficient_data=false`
+   - `highlights` becomes empty after narrative filtering.
+
+### C) Observability additions
+
+Weekly logs now include:
+1. `weekly_semantic_hard_issue_codes`
+2. `weekly_semantic_warning_issue_codes`
+3. Existing `weekly_semantic_issue_codes` remains as full set for compatibility.
+
+### D) UI alignment
+
+1. Sparse reason display is constrained to:
+   - `sub3` (structured sample count `< 3`)
+   - `semantic_degraded` (non-sub3 sparse result)
+2. This avoids the previous misleading "not enough data" implication in warning-only quality cases.
+
+## 17) Update (2026-02-24) - Agent A runtime baseline restore (no skill-doc edits)
+
+Status: implemented at runtime prompt layer only.
+
+### A) Scope boundary
+
+1. Kept `documents/prompt_engineering/*.md` unchanged as canonical baselines.
+2. Restored only runtime prompt behavior for Agent A and A->B mapping constraints.
+
+### B) Runtime changes
+
+1. `frontend/src/lib/prompts/compaction.ts`
+   - Rewrote Agent A system prompt with fixed markdown anchors:
+     - `## Core Logic Chain`
+     - `## Concept Matrix`
+     - `## Unresolved Tensions`
+   - Added hard constraints for:
+     - evidence-only extraction
+     - explicit `[User]/[AI]` ownership
+     - chronological reasoning preservation
+     - no fabrication / no code fences
+     - sparse-input minimal valid skeleton fallback
+   - Prompt version bumped to `v1.0.0-agent-a-baseline1`.
+
+2. `frontend/src/lib/services/insightGenerationService.ts`
+   - `buildSummaryPromptFromCompaction(...)` now carries stricter `conversation_summary.v2` mapping rules:
+     - 2-3 sentence assertion per journey step
+     - plain-language `real_world_anchor`
+     - complete short sentences for unresolved/next-step lists
+     - evidence-only mapping with no unsupported fact injection.
+
+## 18) Update (2026-02-24) - Weekly temporary freeze + v1.7 progress event rollout
+
+Status: implemented in current branch, no schema migration.
+
+### A) Weekly temporary freeze (UI only)
+
+1. `frontend/src/sidepanel/pages/InsightsPage.tsx`:
+   - Weekly Digest accordion is now shelved as `Soon` (`disabled + soonTag`).
+   - Weekly generate/read effects are short-circuited under `WEEKLY_DIGEST_SOON=true`.
+   - Weekly runtime/service code is retained for future re-enable; only UI entry is frozen.
+2. No deletion of weekly persistence or generation functions.
+3. Goal: remove unstable user-facing experience while preserving backend recovery path.
+
+### B) Unresolved weekly blocker kept explicit
+
+1. `buildWeeklySemanticRepairPrompt(...)` in
+   `frontend/src/lib/services/insightGenerationService.ts` still contains mojibake text.
+2. This is recorded as a known quality blocker for the next Weekly re-enable window.
+
+### C) v1.7 progress event contract implemented in runtime
+
+1. Added push message contract `INSIGHT_PIPELINE_PROGRESS` in
+   `frontend/src/lib/messaging/protocol.ts`.
+2. Summary/Weekly generation now emit stage events with monotonic `seq`:
+   - `initiating_pipeline`
+   - `distilling_core_logic` (summary)
+   - `curating_summary` (summary)
+   - `aggregating_weekly_digest` (weekly)
+   - `persisting_result`
+   - terminal `completed | degraded_fallback`
+3. Sidepanel now listens and dedupes by `pipelineId + seq`.
+4. Thread Summary generating UI prioritizes live pipeline events; elapsed-timer phase mapping remains as fallback.
+
+## 12) Update (2026-02-24) - P0 Summary runtime hardening handoff
+
+Detailed postmortem + reusable patterns:
+- documents/engineering_handoffs/2026-02-24-p0-summary-runtime-hardening-handoff.md
+
