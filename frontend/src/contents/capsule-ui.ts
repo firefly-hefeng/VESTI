@@ -60,6 +60,35 @@ const VIEWPORT_MARGIN = 8;
 const COLLAPSED_SIZE = 43.2;
 const LOGO_SIZE = 21.6;
 const UI_SETTINGS_STORAGE_KEY = "vesti_ui_settings";
+const CAPSULE_FONT_FACE_STYLE_ID = "vesti-capsule-font-face-style";
+const FONT_UI_400_URL = new URL(
+  "../../public/fonts/Lexend-UI-400.woff2",
+  import.meta.url
+).toString();
+const FONT_UI_500_URL = new URL(
+  "../../public/fonts/Lexend-UI-500.woff2",
+  import.meta.url
+).toString();
+const FONT_UI_600_URL = new URL(
+  "../../public/fonts/Lexend-UI-600.woff2",
+  import.meta.url
+).toString();
+const FONT_UI_CJK_400_URL = new URL(
+  "../../public/fonts/SourceHanSansSC-UI-400.woff2",
+  import.meta.url
+).toString();
+const FONT_UI_CJK_500_URL = new URL(
+  "../../public/fonts/SourceHanSansSC-UI-500.woff2",
+  import.meta.url
+).toString();
+const FONT_UI_CJK_600_URL = new URL(
+  "../../public/fonts/SourceHanSansSC-UI-600.woff2",
+  import.meta.url
+).toString();
+const FONT_TITLE_400_URL = new URL(
+  "../../public/fonts/Exposure-Title-400.woff2",
+  import.meta.url
+).toString();
 const PRIMARY_ROLLOUT_HOSTS = new Set([
   "chatgpt.com",
   "chat.openai.com",
@@ -195,82 +224,150 @@ const resolvePlatformTone = (
   return PLATFORM_TONE[themeMode][platform] ?? FALLBACK_PLATFORM_TONE[themeMode];
 };
 
+const CAPSULE_FONT_FACE_STYLE_TEXT = `
+@font-face {
+  font-family: "Vesti Sans UI";
+  src: url("${FONT_UI_400_URL}") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+0259, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Vesti Sans UI";
+  src: url("${FONT_UI_500_URL}") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+0259, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Vesti Sans UI";
+  src: url("${FONT_UI_600_URL}") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+0259, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Vesti Sans UI";
+  src: url("${FONT_UI_CJK_400_URL}") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF, U+20000-2A6DF, U+2A700-2B73F, U+2B740-2B81F, U+2B820-2CEAF;
+}
+
+@font-face {
+  font-family: "Vesti Sans UI";
+  src: url("${FONT_UI_CJK_500_URL}") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF, U+20000-2A6DF, U+2A700-2B73F, U+2B740-2B81F, U+2B820-2CEAF;
+}
+
+@font-face {
+  font-family: "Vesti Sans UI";
+  src: url("${FONT_UI_CJK_600_URL}") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF, U+20000-2A6DF, U+2A700-2B73F, U+2B740-2B81F, U+2B820-2CEAF;
+}
+
+@font-face {
+  font-family: "Vesti Title Serif";
+  src: url("${FONT_TITLE_400_URL}") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  font-synthesis: weight;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F;
+}
+`;
+
 const SHADOW_STYLE = `
 :host {
   all: initial;
 }
 
 .capsule-shell {
-  --capsule-bg: #f7f6f3;
-  --capsule-bg2: #eeecea;
-  --capsule-bg3: #e8e6e2;
-  --capsule-border: #e5e4e0;
-  --capsule-divider: #eeecea;
-  --capsule-text1: #1a1a1a;
-  --capsule-text2: #9f9f9f;
-  --capsule-text3: #c8c8c8;
-  --capsule-shadow: 0 12px 40px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.12);
-  --capsule-shadow-hover: 0 14px 42px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.14);
-  --status-held-bg: rgba(180, 120, 20, 0.09);
-  --status-held-text: #8a6200;
-  --status-held-border: rgba(180, 120, 20, 0.2);
-  --status-live-bg: rgba(45, 106, 63, 0.09);
-  --status-live-text: #2d6a3f;
-  --status-live-border: rgba(45, 106, 63, 0.2);
-  --status-ready-bg: rgba(124, 58, 237, 0.08);
-  --status-ready-text: #7c3aed;
-  --status-ready-border: rgba(124, 58, 237, 0.18);
-  --status-neutral-bg: rgba(71, 85, 105, 0.08);
-  --status-neutral-text: #677489;
-  --status-neutral-border: rgba(71, 85, 105, 0.16);
-  --status-error-bg: rgba(220, 38, 38, 0.08);
-  --status-error-text: #b91c1c;
-  --status-error-border: rgba(220, 38, 38, 0.2);
-  --btn-primary-bg: #1a1a1a;
-  --btn-primary-text: #f7f6f3;
-  --btn-secondary-bg: #eeecea;
-  --btn-secondary-text: #9f9f9f;
-  --btn-secondary-border: #e5e4e0;
+  --capsule-bg: hsl(220 24% 95%);
+  --capsule-bg2: hsl(220 23% 94%);
+  --capsule-bg3: hsl(220 22% 92%);
+  --capsule-border: hsl(220 17% 84%);
+  --capsule-divider: hsl(220 20% 88%);
+  --capsule-text1: hsl(224 15% 12%);
+  --capsule-text2: hsl(224 9% 36%);
+  --capsule-text3: hsl(224 7% 56%);
+  --capsule-shadow: 0 8px 22px rgba(28, 20, 15, 0.1), 0 2px 6px rgba(28, 20, 15, 0.08);
+  --capsule-shadow-hover: 0 10px 28px rgba(28, 20, 15, 0.12), 0 3px 9px rgba(28, 20, 15, 0.1);
+  --status-held-bg: hsl(36 90% 43% / 0.12);
+  --status-held-text: hsl(36 90% 43%);
+  --status-held-border: hsl(36 90% 43% / 0.28);
+  --status-live-bg: hsl(146 50% 38% / 0.12);
+  --status-live-text: hsl(146 50% 38%);
+  --status-live-border: hsl(146 50% 38% / 0.28);
+  --status-ready-bg: hsl(265 83% 60% / 0.12);
+  --status-ready-text: hsl(265 83% 60%);
+  --status-ready-border: hsl(265 83% 60% / 0.28);
+  --status-neutral-bg: hsl(224 9% 36% / 0.08);
+  --status-neutral-text: hsl(224 9% 36%);
+  --status-neutral-border: hsl(224 9% 36% / 0.2);
+  --status-error-bg: hsl(0 55% 51% / 0.1);
+  --status-error-text: hsl(0 55% 51%);
+  --status-error-border: hsl(0 55% 51% / 0.24);
+  --btn-primary-bg: hsl(224 15% 12%);
+  --btn-primary-text: hsl(0 0% 100%);
+  --btn-secondary-bg: hsl(220 23% 94%);
+  --btn-secondary-text: hsl(224 9% 36%);
+  --btn-secondary-border: hsl(220 17% 84%);
   position: fixed;
   pointer-events: auto;
   touch-action: none;
   z-index: ${CAPSULE_Z_INDEX};
   font-family: "Vesti Sans UI", -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   color: var(--capsule-text1);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   color-scheme: light;
 }
 
 .capsule-shell[data-theme="dark"] {
-  --capsule-bg: #141414;
-  --capsule-bg2: #1c1c1c;
-  --capsule-bg3: #222222;
-  --capsule-border: #252525;
-  --capsule-divider: #1c1c1c;
-  --capsule-text1: #e8e6e0;
-  --capsule-text2: #555555;
-  --capsule-text3: #333333;
-  --capsule-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
-  --capsule-shadow-hover: 0 14px 42px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.24);
-  --status-held-bg: rgba(200, 140, 40, 0.13);
-  --status-held-text: #c8960a;
-  --status-held-border: rgba(200, 140, 40, 0.22);
-  --status-live-bg: rgba(58, 122, 74, 0.14);
-  --status-live-text: #4a9a5c;
-  --status-live-border: rgba(58, 122, 74, 0.22);
-  --status-ready-bg: rgba(167, 139, 250, 0.12);
-  --status-ready-text: #a78bfa;
-  --status-ready-border: rgba(167, 139, 250, 0.22);
-  --status-neutral-bg: rgba(148, 163, 184, 0.1);
-  --status-neutral-text: #a0aec0;
-  --status-neutral-border: rgba(148, 163, 184, 0.22);
-  --status-error-bg: rgba(248, 113, 113, 0.14);
-  --status-error-text: #fca5a5;
-  --status-error-border: rgba(248, 113, 113, 0.3);
-  --btn-primary-bg: #e8e6e0;
-  --btn-primary-text: #141414;
-  --btn-secondary-bg: #1c1c1c;
-  --btn-secondary-text: #555555;
-  --btn-secondary-border: #252525;
+  --capsule-bg: hsl(0 0% 13%);
+  --capsule-bg2: hsl(0 0% 16%);
+  --capsule-bg3: hsl(0 0% 17%);
+  --capsule-border: hsl(0 0% 25%);
+  --capsule-divider: hsl(0 0% 20%);
+  --capsule-text1: hsl(0 0% 96%);
+  --capsule-text2: hsl(0 0% 78%);
+  --capsule-text3: hsl(0 0% 62%);
+  --capsule-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.3);
+  --capsule-shadow-hover: 0 10px 28px rgba(0, 0, 0, 0.35), 0 3px 9px rgba(0, 0, 0, 0.25);
+  --status-held-bg: hsl(40 85% 58% / 0.2);
+  --status-held-text: hsl(40 85% 58%);
+  --status-held-border: hsl(40 85% 58% / 0.34);
+  --status-live-bg: hsl(145 55% 46% / 0.2);
+  --status-live-text: hsl(145 55% 46%);
+  --status-live-border: hsl(145 55% 46% / 0.34);
+  --status-ready-bg: hsl(262 92% 76% / 0.2);
+  --status-ready-text: hsl(262 92% 76%);
+  --status-ready-border: hsl(262 92% 76% / 0.34);
+  --status-neutral-bg: hsl(0 0% 78% / 0.12);
+  --status-neutral-text: hsl(0 0% 78%);
+  --status-neutral-border: hsl(0 0% 78% / 0.26);
+  --status-error-bg: hsl(0 72% 60% / 0.2);
+  --status-error-text: hsl(0 72% 60%);
+  --status-error-border: hsl(0 72% 60% / 0.34);
+  --btn-primary-bg: hsl(0 0% 96%);
+  --btn-primary-text: hsl(0 0% 10%);
+  --btn-secondary-bg: hsl(0 0% 16%);
+  --btn-secondary-text: hsl(0 0% 78%);
+  --btn-secondary-border: hsl(0 0% 25%);
   color-scheme: dark;
 }
 
@@ -283,22 +380,23 @@ const SHADOW_STYLE = `
 .capsule-collapsed {
   width: ${COLLAPSED_SIZE}px;
   height: ${COLLAPSED_SIZE}px;
-  border: 1px solid #e5e4e0;
+  border: 1px solid hsl(220 17% 84%);
   border-radius: 9999px;
-  background: #f7f6f3;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.12);
+  background: hsl(220 24% 95%);
+  box-shadow: 0 3px 9px rgba(28, 20, 15, 0.16), 0 1px 2px rgba(28, 20, 15, 0.1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
   cursor: grab;
+  font-family: inherit;
   padding: 0;
   touch-action: none;
 }
 
 .capsule-collapsed:hover {
   transform: translateY(-1px) scale(1.02);
-  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 6px 14px rgba(28, 20, 15, 0.2), 0 2px 5px rgba(28, 20, 15, 0.12);
 }
 
 .capsule-collapsed:active {
@@ -350,10 +448,14 @@ const SHADOW_STYLE = `
 
 .capsule-title {
   font-family: "Vesti Title Serif", "Tiempos Headline", "Tiempos Text", "Tiempos", ui-serif, "Apple-System-UI-Serif", "BlinkMacSystemFont", serif;
-  font-size: 15px;
-  line-height: 1;
-  font-weight: 400;
-  letter-spacing: -0.02em;
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 700;
+  font-synthesis: weight;
+  letter-spacing: -0.004em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .capsule-platform {
@@ -369,6 +471,7 @@ const SHADOW_STYLE = `
 .capsule-collapse-btn {
   width: 24px;
   height: 24px;
+  font-family: inherit;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
@@ -522,6 +625,7 @@ const SHADOW_STYLE = `
 .capsule-action-btn {
   flex: 1;
   min-height: 34px;
+  font-family: inherit;
   border: 1px solid transparent;
   border-radius: 9px;
   padding: 8px 10px;
@@ -862,6 +966,14 @@ const SHADOW_STYLE = `
 }
 `;
 
+const ensureCapsuleFontFaceStyleInjected = (): void => {
+  if (document.getElementById(CAPSULE_FONT_FACE_STYLE_ID)) return;
+  const styleNode = document.createElement("style");
+  styleNode.id = CAPSULE_FONT_FACE_STYLE_ID;
+  styleNode.textContent = CAPSULE_FONT_FACE_STYLE_TEXT;
+  (document.head ?? document.documentElement).appendChild(styleNode);
+};
+
 const clamp = (value: number, min: number, max: number): number => {
   const normalizedMax = Math.max(min, max);
   return Math.min(Math.max(value, min), normalizedMax);
@@ -931,6 +1043,7 @@ const getRetryDelay = (failureCount: number): number => {
 const mount = async () => {
   if (window.top !== window.self) return;
   if (document.getElementById(CAPSULE_ROOT_ID)) return;
+  ensureCapsuleFontFaceStyleInjected();
 
   const hostname = normalizeHost(window.location.hostname);
   const isPrimaryRolloutHost = PRIMARY_ROLLOUT_HOSTS.has(hostname);

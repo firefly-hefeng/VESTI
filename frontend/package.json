@@ -49,6 +49,28 @@
       "offscreen",
       "sidePanel",
       "unlimitedStorage"
+    ],
+    "web_accessible_resources": [
+      {
+        "resources": [
+          "Lexend-UI-400*.woff2",
+          "Lexend-UI-500*.woff2",
+          "Lexend-UI-600*.woff2",
+          "SourceHanSansSC-UI-400*.woff2",
+          "SourceHanSansSC-UI-500*.woff2",
+          "SourceHanSansSC-UI-600*.woff2",
+          "Exposure-Title-400*.woff2"
+        ],
+        "matches": [
+          "https://chatgpt.com/*",
+          "https://chat.openai.com/*",
+          "https://claude.ai/*",
+          "https://gemini.google.com/*",
+          "https://chat.deepseek.com/*",
+          "https://chat.qwen.ai/*",
+          "https://www.doubao.com/*"
+        ]
+      }
     ]
   }
 }
