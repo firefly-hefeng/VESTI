@@ -408,12 +408,6 @@ export function ConversationCard({
                   className="flex h-6 items-center gap-1 rounded-sm px-1.5 text-[11px] text-text-tertiary opacity-60 transition-all duration-150 hover:bg-accent-primary-light hover:text-accent-primary hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 >
                   <FolderOpen className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  <span className="max-w-[60px] truncate">
-                    {conversation.topic_id
-                      ? topicOptions.find((topic) => topic.id === conversation.topic_id)
-                          ?.label ?? "Group"
-                      : "Group"}
-                  </span>
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44">
