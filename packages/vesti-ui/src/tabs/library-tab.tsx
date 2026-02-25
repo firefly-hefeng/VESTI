@@ -1265,7 +1265,7 @@ export function LibraryTab({
                         }`}
                       >
                         <div className="overflow-hidden">
-                          <StructuredSummaryCard data={summaryData} />
+                          <StructuredSummaryCard data={summaryData} compact />
                         </div>
                       </div>
                     </div>
