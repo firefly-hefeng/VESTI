@@ -1,4 +1,5 @@
 import type {
+  ChatSummaryData,
   Conversation,
   GardenerResult,
   Message,
@@ -6,8 +7,8 @@ import type {
   Platform,
   RelatedConversation,
   RagResponse,
+  SummaryRecord,
   Topic,
-  ChatSummaryData,
 } from './types';
 
 type ConversationFilters = {
@@ -153,8 +154,8 @@ type ResponseDataMap = {
   CREATE_NOTE: { note: Note };
   UPDATE_NOTE: { note: Note };
   DELETE_NOTE: { deleted: boolean };
-  GET_CONVERSATION_SUMMARY: ChatSummaryData | null;
-  GENERATE_CONVERSATION_SUMMARY: ChatSummaryData;
+  GET_CONVERSATION_SUMMARY: SummaryRecord | null;
+  GENERATE_CONVERSATION_SUMMARY: SummaryRecord;
   DELETE_CONVERSATION: { deleted: boolean };
   UPDATE_CONVERSATION_TITLE: { updated: boolean; conversation: Conversation };
 };
@@ -178,13 +179,6 @@ type ConversationSummaryV2Payload = {
     depth_level: "superficial" | "moderate" | "deep";
   };
   actionable_next_steps: string[];
-};
-
-type SummaryRecordPayload = {
-  content: string;
-  structured?: ConversationSummaryV2Payload | null;
-  status?: "ok" | "fallback";
-  createdAt: number;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -216,7 +210,7 @@ const isConversationSummaryV2 = (
 };
 
 function toChatSummaryData(
-  record: SummaryRecordPayload | null
+  record: SummaryRecord | null
 ): ChatSummaryData | null {
   if (!record) return null;
   const generatedAt =
@@ -226,7 +220,8 @@ function toChatSummaryData(
   const fallbackText = typeof record.content === "string" ? record.content.trim() : "";
   const fallbackTitle = fallbackText.split("\n")[0] || "Summary";
 
-  if (!isConversationSummaryV2(record.structured)) {
+  const structured = record.structured;
+  if (!isConversationSummaryV2(structured)) {
     return {
       meta: {
         title: fallbackTitle,
@@ -248,7 +243,6 @@ function toChatSummaryData(
     };
   }
 
-  const structured = record.structured;
   const journey = structured.thinking_journey
     .filter((item) => isRecord(item))
     .map((item, index) => ({
@@ -282,7 +276,7 @@ function toChatSummaryData(
       title: structured.core_question || fallbackTitle,
       generated_at: generatedAt,
       tags: [],
-      fallback: record.status === "fallback",
+      fallback: false,
     },
     core_question: structured.core_question,
     thinking_journey: journey,
@@ -597,23 +591,23 @@ export async function deleteNote(id: number): Promise<void> {
 export async function getSummary(
   conversationId: number
 ): Promise<ChatSummaryData | null> {
-  const raw = (await sendRequest({
+  const record = (await sendRequest({
     type: 'GET_CONVERSATION_SUMMARY',
     target: 'offscreen',
     payload: { conversationId },
-  }, LONG_RUNNING_TIMEOUT_MS)) as unknown as SummaryRecordPayload | null;
-  return toChatSummaryData(raw);
+  }, LONG_RUNNING_TIMEOUT_MS)) as SummaryRecord | null;
+  return toChatSummaryData(record);
 }
 
 export async function generateSummary(
   conversationId: number
 ): Promise<ChatSummaryData> {
-  const raw = (await sendRequest({
+  const record = (await sendRequest({
     type: 'GENERATE_CONVERSATION_SUMMARY',
     target: 'offscreen',
     payload: { conversationId },
-  }, LONG_RUNNING_TIMEOUT_MS)) as unknown as SummaryRecordPayload;
-  const data = toChatSummaryData(raw);
+  }, LONG_RUNNING_TIMEOUT_MS)) as SummaryRecord;
+  const data = toChatSummaryData(record);
   if (!data) {
     throw new Error('SUMMARY_GENERATION_FAILED');
   }

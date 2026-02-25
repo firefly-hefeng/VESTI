@@ -102,3 +102,13 @@ export interface ChatSummaryData {
   actionable_next_steps: string[];
   plain_text?: string;
 }
+
+export interface SummaryRecord {
+  id: number;
+  conversationId: number;
+  content: string;
+  structured?: Record<string, unknown> | null;
+  modelId: string;
+  createdAt: number;
+  sourceUpdatedAt: number;
+}

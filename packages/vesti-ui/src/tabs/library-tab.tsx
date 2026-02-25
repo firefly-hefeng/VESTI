@@ -27,6 +27,8 @@ import type {
 import { useLibraryData } from "../contexts/library-data";
 import { PLATFORM_COLORS, PLATFORM_TEXT_COLORS } from "../constants/platform";
 import { StructuredSummaryCard } from "../components/StructuredSummaryCard";
+import { SummaryPipelineProgress } from "../components/SummaryPipelineProgress";
+import type { PipelineStageState } from "../components/SummaryPipelineProgress";
 
 type ViewMode = "conversations" | "notes";
 type FolderItem = { name: string; isCustom: boolean; isTag: boolean };
@@ -70,6 +72,7 @@ export function LibraryTab({
   const [summaryData, setSummaryData] = useState<ChatSummaryData | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryGenerating, setSummaryGenerating] = useState(false);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStageState[]>([]);
   const [customFolders, setCustomFolders] = useState<string[]>([]);
   const [openConversationMenuId, setOpenConversationMenuId] = useState<number | null>(null);
   const [openFolderMenuName, setOpenFolderMenuName] = useState<string | null>(null);
@@ -86,6 +89,42 @@ export function LibraryTab({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const FOLDER_META_KEY = "vesti_folder_meta";
+
+  function getInitialStages(): PipelineStageState[] {
+    return [
+      {
+        stage: "initiating_pipeline",
+        label: "Initiating pipeline...",
+        status: "pending",
+      },
+      {
+        stage: "distilling_core_logic",
+        label: "Extracting core question...",
+        status: "pending",
+      },
+      {
+        stage: "curating_summary",
+        label: "Generating insights...",
+        status: "pending",
+      },
+      {
+        stage: "persisting_result",
+        label: "Saving summary...",
+        status: "pending",
+      },
+    ];
+  }
+
+  function isPipelineStageStatus(
+    status: string
+  ): status is PipelineStageState["status"] {
+    return (
+      status === "pending" ||
+      status === "in_progress" ||
+      status === "completed" ||
+      status === "degraded_fallback"
+    );
+  }
 
   // Auto-save note with debounce
   useEffect(() => {
@@ -1024,7 +1063,23 @@ export function LibraryTab({
                   <span className="text-xs font-sans text-text-tertiary">· {notes.length} notes</span>
                 </div>
                 <button
-                  onClick={() => console.log("[dashboard] Create new note")}
+                  onClick={async () => {
+                    if (!storage.saveNote) return;
+                    try {
+                      const newNote = await storage.saveNote({
+                        title: "New Note",
+                        content: "",
+                        linked_conversation_ids: selectedConversationId
+                          ? [selectedConversationId]
+                          : [],
+                      });
+                      setNotes((prev) => [newNote, ...prev]);
+                      setSelectedNoteId(newNote.id);
+                      setViewMode("notes");
+                    } catch (error) {
+                      console.error("[library] New Note failed", error);
+                    }
+                  }}
                   className="px-3 py-1.5 text-[13px] font-sans font-medium text-text-primary bg-bg-surface-card hover:bg-bg-surface-card-hover rounded-md transition-colors"
                 >
                   + New Note
@@ -1178,31 +1233,125 @@ export function LibraryTab({
                         No summary yet. Generate one to see structured insights.
                       </p>
                       {storage.generateSummary && (
-                        <button
-                          type="button"
-                          disabled={summaryGenerating}
-                          onClick={async () => {
-                            if (!selectedConversationId) return;
-                            setSummaryGenerating(true);
-                            try {
-                              const data = await storage.generateSummary!(
-                                selectedConversationId
+                        <>
+                          {summaryGenerating && pipelineStages.length > 0 && (
+                            <SummaryPipelineProgress stages={pipelineStages} />
+                          )}
+                          <button
+                            type="button"
+                            disabled={summaryGenerating}
+                            onClick={async () => {
+                              if (!selectedConversationId || !storage.generateSummary) return;
+                              setSummaryGenerating(true);
+                              setPipelineStages(getInitialStages());
+                              setPipelineStages((prev) =>
+                                prev.map((stage, index) =>
+                                  index === 0
+                                    ? { ...stage, status: "in_progress" }
+                                    : stage
+                                )
                               );
-                              setSummaryData(data);
-                            } catch (error) {
-                              console.error("[library] generateSummary failed", error);
-                            } finally {
-                              setSummaryGenerating(false);
-                            }
-                          }}
-                          className="self-start inline-flex items-center gap-1.5 px-3 py-1.5
-                           rounded-md text-[13px] font-sans text-text-secondary
-                           hover:text-accent-primary hover:bg-accent-primary-light
-                           transition-colors duration-150 disabled:opacity-50
-                           disabled:cursor-not-allowed"
-                        >
-                          {summaryGenerating ? "Generating..." : "Generate Summary"}
-                        </button>
+
+                              let progressListener:
+                                | ((
+                                    message: unknown,
+                                    _sender: chrome.runtime.MessageSender,
+                                    _sendResponse: (response?: unknown) => void
+                                  ) => void)
+                                | null = null;
+
+                              try {
+                                if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
+                                  progressListener = (message) => {
+                                    if (!message || typeof message !== "object") return;
+                                    const maybeMessage = message as {
+                                      type?: unknown;
+                                      payload?: { stage?: unknown; status?: unknown };
+                                    };
+                                    if (maybeMessage.type !== "INSIGHT_PIPELINE_PROGRESS") return;
+
+                                    const stage = maybeMessage.payload?.stage;
+                                    const status = maybeMessage.payload?.status;
+                                    if (typeof stage !== "string" || typeof status !== "string") {
+                                      return;
+                                    }
+                                    if (!isPipelineStageStatus(status)) {
+                                      return;
+                                    }
+
+                                    setPipelineStages((prev) => {
+                                      const currentIdx = prev.findIndex((item) => item.stage === stage);
+                                      if (currentIdx === -1) return prev;
+
+                                      return prev.map((item, idx) => {
+                                        if (item.stage === stage) {
+                                          return { ...item, status };
+                                        }
+                                        if (status === "completed" && idx === currentIdx + 1) {
+                                          return { ...item, status: "in_progress" };
+                                        }
+                                        return item;
+                                      });
+                                    });
+                                  };
+                                  chrome.runtime.onMessage.addListener(progressListener);
+                                } else {
+                                  const simulateProgress = async () => {
+                                    const stages = getInitialStages().map((item) => item.stage);
+                                    for (let i = 0; i < stages.length; i += 1) {
+                                      await new Promise((resolve) => {
+                                        setTimeout(resolve, 600);
+                                      });
+                                      setPipelineStages((prev) =>
+                                        prev.map((stage, idx) => ({
+                                          ...stage,
+                                          status:
+                                            idx < i
+                                              ? "completed"
+                                              : idx === i
+                                                ? "in_progress"
+                                                : "pending",
+                                        }))
+                                      );
+                                    }
+                                  };
+                                  void simulateProgress();
+                                }
+
+                                const data = await storage.generateSummary(selectedConversationId);
+                                setPipelineStages((prev) =>
+                                  prev.map((stage) => ({ ...stage, status: "completed" }))
+                                );
+                                setSummaryData(data);
+                              } catch (error) {
+                                console.error("[library] generateSummary failed", error);
+                                setPipelineStages((prev) =>
+                                  prev.map((stage) =>
+                                    stage.status === "in_progress"
+                                      ? { ...stage, status: "degraded_fallback" }
+                                      : stage
+                                  )
+                                );
+                              } finally {
+                                if (
+                                  progressListener &&
+                                  typeof chrome !== "undefined" &&
+                                  chrome.runtime?.onMessage
+                                ) {
+                                  chrome.runtime.onMessage.removeListener(progressListener);
+                                }
+                                setSummaryGenerating(false);
+                              }
+                            }}
+                            className="self-start inline-flex items-center gap-1.5 px-3 py-1.5
+                             rounded-md text-[13px] font-sans text-text-secondary
+                             hover:text-accent-primary hover:bg-accent-primary-light
+                             transition-colors duration-150 disabled:opacity-50
+                             disabled:cursor-not-allowed"
+                          >
+                            Generate Summary
+                          </button>
+                        </>
                       )}
                     </div>
                   )}
