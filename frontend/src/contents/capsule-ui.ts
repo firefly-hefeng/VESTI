@@ -235,7 +235,7 @@ const SHADOW_STYLE = `
   pointer-events: auto;
   touch-action: none;
   z-index: ${CAPSULE_Z_INDEX};
-  font-family: "Vesti Sans UI", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  font-family: "Vesti Sans UI", -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   color: var(--capsule-text1);
   color-scheme: light;
 }
@@ -283,10 +283,10 @@ const SHADOW_STYLE = `
 .capsule-collapsed {
   width: ${COLLAPSED_SIZE}px;
   height: ${COLLAPSED_SIZE}px;
-  border: 1px solid var(--capsule-border);
+  border: 1px solid #e5e4e0;
   border-radius: 9999px;
-  background: var(--capsule-bg);
-  box-shadow: var(--capsule-shadow);
+  background: #f7f6f3;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.12);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -298,7 +298,7 @@ const SHADOW_STYLE = `
 
 .capsule-collapsed:hover {
   transform: translateY(-1px) scale(1.02);
-  box-shadow: var(--capsule-shadow-hover);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.14);
 }
 
 .capsule-collapsed:active {
@@ -349,7 +349,7 @@ const SHADOW_STYLE = `
 }
 
 .capsule-title {
-  font-family: "Vesti Title Serif", "Tiempos Headline", Georgia, "Times New Roman", serif;
+  font-family: "Vesti Title Serif", "Tiempos Headline", "Tiempos Text", "Tiempos", ui-serif, "Apple-System-UI-Serif", "BlinkMacSystemFont", serif;
   font-size: 15px;
   line-height: 1;
   font-weight: 400;
@@ -489,12 +489,14 @@ const SHADOW_STYLE = `
 }
 
 .capsule-metric-value {
+  font-family: "Vesti Title Serif", "Tiempos Headline", "Tiempos Text", "Tiempos", ui-serif, "Apple-System-UI-Serif", "BlinkMacSystemFont", serif;
   font-size: 20px;
   line-height: 1;
   font-weight: 600;
   letter-spacing: -0.03em;
   color: var(--capsule-text1);
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .capsule-metric-value.is-empty {
@@ -582,10 +584,6 @@ const SHADOW_STYLE = `
 
 .fallback-shell .capsule-panel {
   display: none !important;
-}
-
-.capsule-shell[data-theme="dark"] .capsule-collapsed {
-  box-shadow: var(--capsule-shadow);
 }
 
 .capsule-shell[data-theme="dark"] .capsule-panel {
@@ -859,8 +857,7 @@ const SHADOW_STYLE = `
 }
 
 .capsule-shell[data-theme="dark"][data-view="expanded"] .capsule-collapse-btn:focus-visible,
-.capsule-shell[data-theme="dark"][data-view="expanded"] .capsule-action-btn:focus-visible,
-.capsule-shell[data-theme="dark"][data-view="collapsed"] .capsule-collapsed:focus-visible {
+.capsule-shell[data-theme="dark"][data-view="expanded"] .capsule-action-btn:focus-visible {
   box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.32);
 }
 `;

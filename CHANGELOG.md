@@ -36,13 +36,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 ### Changed
 - Expanded capsule primary rollout hosts from partial whitelist to all currently supported chat platforms (ChatGPT, Claude, Gemini, DeepSeek, Qwen, Doubao).
 - Kept draggable hotfix behavior as default: collapsed capsule is directly draggable with 5px anti-misfire threshold and post-drag click suppression.
+- Polished expanded capsule card UI to match the approved prototype skin (spacing, hierarchy, status rows, metric cards, and action buttons) while preserving v1.5-lite state semantics.
+- Synced expanded capsule light/dark rendering to `vesti_ui_settings.themeMode` with runtime storage-change updates and listener cleanup on destroy.
+- Aligned platform badge color tokens to sidepanel light/dark triplets (`bg/text/border`) for ChatGPT, Claude, Gemini, DeepSeek, Qwen, and Doubao.
+- Aligned expanded-card typography with sidepanel stacks (`--font-ui`, `--font-vesti-serif` equivalent), including serif + tabular numerics for `Messages/Turns` large metrics.
+- Rolled back collapsed capsule theming to fixed light appearance (independent from theme mode) while keeping expanded-card theme switching enabled.
 
 ### Fixed
 - Fixed capsule drag regression that blocked viewport repositioning on primary hosts.
 - Disabled native image drag on capsule logo to avoid dragging into composer inputs as text/image payload.
 
 ### Docs
-- _None yet_
+- Added engineering handoff `documents/engineering_handoffs/2026-02-25-v1_5_lite_capsule_rollout_and_ui_closeout.md` covering implementation log, release plan, and architecture details.
 
 ### Chore
 - _None yet_
