@@ -1,18 +1,20 @@
 import type { Conversation } from "../types";
 import type { PromptVersion, WeeklyDigestPromptPayload } from "./types";
 
-const WEEKLY_LITE_SYSTEM = `你是 Vesti Agent C（周度知识策展器）。
-你的任务是基于输入的 conversation_summary.v2 数组，输出 weekly_lite.v1 JSON。
+const WEEKLY_LITE_SYSTEM = `你是 Vesti 的 Agent C（Weekly Digest 策展器）。
 
-严格规则：
-1) 只输出一个 JSON 对象，不要 markdown、不要解释、不要代码块。
-2) 只能使用输入中的证据，禁止补充外部事实。
-3) 若有效样本数 < 3，必须触发 insufficient_data=true，且：
-   - highlights 仅 1 条事实句；
-   - recurring_questions/cross_domain_echoes/unresolved_threads/suggested_focus/evidence 全部是 []。
-4) 列表项必须是完整可读短句，禁止词桩、单字、碎片（如“中”“深”“Gi”“-> 深”）。
-5) cross_domain_echoes 字段必须保留；没有真实跨域同构时返回 []。
-6) 不得新增或删除 schema 字段，不得虚构 conversation_id。
+任务：仅基于输入的 conversation_summary.v2 数组，生成 weekly_lite.v1 JSON。
+
+硬约束：
+1) 只输出一个 JSON 对象，不要 markdown、解释或代码块。
+2) 只使用输入证据，禁止补充外部事实或编造 conversation_id。
+3) 若有效样本数 < 3，必须 short-circuit：
+   - insufficient_data=true
+   - highlights 仅 1 条事实句
+   - recurring_questions/cross_domain_echoes/unresolved_threads/suggested_focus/evidence 全部为 []
+4) 列表项必须是完整可读短句，禁止词桩、单字和碎片。
+5) cross_domain_echoes 字段必须保留；无证据时返回 []。
+6) 不得新增或删除 weekly_lite.v1 字段。
 
 输出 schema（weekly_lite.v1）：
 {
@@ -68,7 +70,7 @@ function toWeeklyConversationsText(conversations: Conversation[]): string {
       return `【会话 #${conversation.id}】标题: ${sanitizeLine(conversation.title || "(untitled)")}
 平台: ${conversation.platform}
 时间: ${formatDateTime(conversation.created_at)}
-轮次: ${conversation.message_count}
+消息数: ${conversation.message_count}
 摘要: ${sanitizeLine(conversation.snippet || "(none)")}`;
     })
     .join("\n---\n");
@@ -140,8 +142,7 @@ function buildWeeklyLiteFallbackPrompt(payload: WeeklyDigestPromptPayload): stri
   const conversationsText = toWeeklyConversationsText(payload.conversations);
   const locale = payload.locale || "zh";
 
-  return `请生成本周 Weekly Lite 纯文本复盘（不要输出 JSON，不要 markdown）。
-语言: ${locale}
+  return `请生成本周 Weekly Lite 纯文本复盘（不要输出 JSON，不要 markdown）。语言: ${locale}
 
 ${conversationsText}
 
@@ -189,12 +190,12 @@ ${transcript}`;
 }
 
 export const CURRENT_WEEKLY_DIGEST_PROMPT: PromptVersion<WeeklyDigestPromptPayload> = {
-  version: "v1.4.0-baseline1",
+  version: "v1.4.1-baseline2-lenient",
   createdAt: "2026-02-24",
   description:
-    "Weekly digest long-term baseline: Chinese strict schema prompt, evidence-bounded aggregation, and anti-fragment narrative constraints.",
+    "Weekly digest baseline v2: readable Chinese prompt, strict weekly_lite.v1 contract, evidence-bounded aggregation.",
   system: WEEKLY_LITE_SYSTEM,
-  fallbackSystem: "你是一位克制且清晰的周复盘助手，仅输出纯文本。",
+  fallbackSystem: "你是一位清晰克制的周复盘助手，仅输出纯文本。",
   userTemplate: buildWeeklyLitePrompt,
   fallbackTemplate: buildWeeklyLiteFallbackPrompt,
 };

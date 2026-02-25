@@ -1,6 +1,7 @@
 import type {
   ActiveCaptureStatus,
   Conversation,
+  DataOverviewSnapshot,
   DashboardStats,
   ExportFormat,
   ForceArchiveTransientResult,
@@ -97,6 +98,13 @@ export async function getStorageUsage(): Promise<StorageUsageSnapshot> {
   }) as Promise<StorageUsageSnapshot>;
 }
 
+export async function getDataOverview(): Promise<DataOverviewSnapshot> {
+  return sendRequest({
+    type: "GET_DATA_OVERVIEW",
+    target: "offscreen",
+  }) as Promise<DataOverviewSnapshot>;
+}
+
 export async function exportData(
   format: ExportFormat
 ): Promise<{ blob: Blob; filename: string; mime: string }> {
@@ -116,6 +124,17 @@ export async function exportData(
 export async function clearAllData(): Promise<void> {
   await sendRequest({
     type: "CLEAR_ALL_DATA",
+    target: "offscreen",
+  });
+
+  chrome.runtime.sendMessage({ type: "VESTI_DATA_UPDATED" }, () => {
+    void chrome.runtime.lastError;
+  });
+}
+
+export async function clearInsightsCache(): Promise<void> {
+  await sendRequest({
+    type: "CLEAR_INSIGHTS_CACHE",
     target: "offscreen",
   });
 

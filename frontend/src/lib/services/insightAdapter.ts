@@ -455,10 +455,7 @@ export function toWeeklySummaryData(report: WeeklyReportRecord): WeeklySummaryDa
       structured.suggested_focus,
       6
     );
-    const suggestedFocus =
-      !structured.insufficient_data && suggested.length === 0
-        ? [DEFAULT_WEEKLY_SUGGESTED_FOCUS]
-        : suggested;
+    const suggestedFocus = suggested;
 
     return {
       meta: {

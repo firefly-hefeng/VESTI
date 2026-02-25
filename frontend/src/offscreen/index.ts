@@ -9,9 +9,11 @@ import {
   deleteConversation,
   updateConversationTitle,
   getDashboardStats,
+  getDataOverview,
   getStorageUsage,
   exportAllData,
   clearAllData,
+  clearInsightsCache,
   getSummary,
   getWeeklyReport,
 } from "../lib/db/repository";
@@ -82,12 +84,20 @@ async function handleRequest(message: RequestMessage): Promise<ResponseMessage> 
         const data = await getStorageUsage();
         return { ok: true, type: messageType, data };
       }
+      case "GET_DATA_OVERVIEW": {
+        const data = await getDataOverview();
+        return { ok: true, type: messageType, data };
+      }
       case "EXPORT_DATA": {
         const data = await exportAllData(message.payload.format);
         return { ok: true, type: messageType, data };
       }
       case "CLEAR_ALL_DATA": {
         const cleared = await clearAllData();
+        return { ok: true, type: messageType, data: { cleared } };
+      }
+      case "CLEAR_INSIGHTS_CACHE": {
+        const cleared = await clearInsightsCache();
         return { ok: true, type: messageType, data: { cleared } };
       }
       case "GET_LLM_SETTINGS": {

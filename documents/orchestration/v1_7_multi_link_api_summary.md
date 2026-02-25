@@ -251,3 +251,82 @@ Recommendation for v1.7 stabilization:
    - `weekly_substantive_count`
    - `weekly_structured_count`
    - `weekly_input_mode` (`summary_v2_only`)
+
+## 11) Update 2026-02-24 (Hackathon Lenient semantic gate profile)
+
+1. Weekly semantic gate now uses severity tiers (no schema change):
+   - hard issues:
+     - `LOW_SIGNAL_HIGHLIGHT`
+   - warning issues:
+     - `EMPTY_VALID_HIGHLIGHTS`
+     - `LOW_SIGNAL_RECURRING`
+     - `RECURRING_NOT_QUESTIONLIKE`
+     - `LOW_SIGNAL_UNRESOLVED`
+     - `LOW_SIGNAL_SUGGESTED_FOCUS`
+     - `EMPTY_VALID_SUGGESTED_FOCUS`
+
+2. Gate pass condition:
+   - pass when hard issue count is zero.
+   - warning-only outputs are allowed to persist and render as ready.
+   - `LOW_SIGNAL_HIGHLIGHT` now triggers only when no high-signal highlight item exists.
+
+3. Degrade condition:
+   - degrade to `insufficient_data=true` only when hard issues remain after repair rounds, or parse/schema still fails.
+   - `sub-3` short-circuit rule (`<3`) remains unchanged.
+   - when `insufficient_data=false` and highlights collapse after filtering, runtime injects an evidence-backed highlight fallback before gate evaluation.
+
+4. New observability keys:
+   - `weekly_semantic_hard_issue_codes`
+   - `weekly_semantic_warning_issue_codes`
+   - existing `weekly_semantic_issue_codes` retained as full issue union.
+
+## 12) Update 2026-02-24 (Agent A runtime baseline restore)
+
+1. Scope:
+   - runtime-only restoration; canonical skill markdown files remain unchanged.
+
+2. Runtime prompt upgrades in `frontend/src/lib/prompts/compaction.ts`:
+   - fixed markdown section anchors:
+     - `## Core Logic Chain`
+     - `## Concept Matrix`
+     - `## Unresolved Tensions`
+   - strict constraints for evidence-only extraction, role isolation, chronology, and sparse-input fallback.
+   - prompt version bumped to `v1.0.0-agent-a-baseline1`.
+
+3. A->B mapping hardening in `frontend/src/lib/services/insightGenerationService.ts`:
+   - compaction-fed summary prompt now requires:
+     - 2-3 sentence assertions in `thinking_journey`
+     - plain-language `real_world_anchor`
+     - complete narrative items for unresolved/next steps
+     - no unsupported fact injection.
+
+## 13) Update 2026-02-24 (Weekly UI freeze + pipeline progress event)
+
+1. Weekly status is now:
+   - runtime retained
+   - UI shelved as `Soon`
+   - no schema/version migration (`weekly_lite.v1` unchanged)
+
+2. Freeze scope:
+   - only Insights UI entry is disabled.
+   - weekly storage and generation functions remain in code for controlled re-enable.
+
+3. v1.7 progress push event is now implemented:
+   - event type: `INSIGHT_PIPELINE_PROGRESS`
+   - payload fields include:
+     - `pipelineId`
+     - `scope`
+     - `targetId`
+     - `stage`
+     - `status`
+     - `attempt`
+     - `startedAt`
+     - `updatedAt`
+     - `route`
+     - `modelId`
+     - `promptVersion`
+     - `seq`
+   - sidepanel consumer dedupes by `pipelineId + seq`.
+
+4. Current known gap for weekly re-enable:
+   - weekly semantic repair prompt text in runtime still contains mojibake and should be fixed before restoring UI access.

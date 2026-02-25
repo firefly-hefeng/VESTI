@@ -1,5 +1,7 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import type { Conversation, PageId } from "~lib/types";
+import type { InsightPipelineProgressPayload } from "~lib/messaging/protocol";
+import { isInsightPipelineProgressMessage } from "~lib/messaging/protocol";
 import { Dock } from "./components/Dock";
 import { TimelinePage } from "./pages/TimelinePage";
 import { InsightsPage } from "./pages/InsightsPage";
@@ -9,12 +11,27 @@ import { DataPage } from "./pages/DataPage";
 
 export function VestiSidepanel() {
   const [currentPage, setCurrentPage] = useState<PageId>("timeline");
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [selectedConversation, setSelectedConversation] =
+    useState<Conversation | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
+  const [pipelineProgressEvent, setPipelineProgressEvent] =
+    useState<InsightPipelineProgressPayload | null>(null);
+  const latestPipelineSeqRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const handler = (message: unknown) => {
       if (!message || typeof message !== "object") return;
+
+      if (isInsightPipelineProgressMessage(message)) {
+        const { pipelineId, seq } = message.payload;
+        const lastSeq = latestPipelineSeqRef.current[pipelineId] ?? 0;
+        if (seq > lastSeq) {
+          latestPipelineSeqRef.current[pipelineId] = seq;
+          setPipelineProgressEvent(message.payload);
+        }
+        return;
+      }
+
       const type = (message as { type?: string }).type;
       if (type === "VESTI_DATA_UPDATED") {
         setRefreshToken(Date.now());
@@ -61,6 +78,7 @@ export function VestiSidepanel() {
             <InsightsPage
               conversation={selectedConversation}
               refreshToken={refreshToken}
+              pipelineProgressEvent={pipelineProgressEvent}
             />
           ) : currentPage === "settings" ? (
             <SettingsPage onNavigateToData={handleNavigateToData} />

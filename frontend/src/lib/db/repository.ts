@@ -1,6 +1,7 @@
 import type {
   Conversation,
   ConversationSummaryV2,
+  DataOverviewSnapshot,
   ExportFormat,
   ExportPayload,
   Message,
@@ -291,6 +292,19 @@ export async function clearAllData(): Promise<boolean> {
   return true;
 }
 
+export async function clearInsightsCache(): Promise<boolean> {
+  await db.transaction(
+    "rw",
+    db.summaries,
+    db.weekly_reports,
+    async () => {
+      await db.summaries.clear();
+      await db.weekly_reports.clear();
+    }
+  );
+  return true;
+}
+
 async function collectExportDataset() {
   const conversations = (await db.conversations.toArray()).map(toConversation);
   const messages = (await db.messages.toArray()).map(toMessage);
@@ -301,6 +315,32 @@ async function collectExportDataset() {
 
 export async function getStorageUsage(): Promise<StorageUsageSnapshot> {
   return getStorageUsageSnapshot();
+}
+
+export async function getDataOverview(): Promise<DataOverviewSnapshot> {
+  const [storage, totalConversations, summaryRecordCount, weeklyReportCount] =
+    await Promise.all([
+      getStorageUsageSnapshot(),
+      db.conversations.count(),
+      db.summaries.count(),
+      db.weekly_reports.count(),
+    ]);
+
+  const [uniqueSummaryConversationIds, lastSummary] = await Promise.all([
+    db.summaries.orderBy("conversationId").uniqueKeys(),
+    db.summaries.orderBy("createdAt").last(),
+  ]);
+
+  return {
+    storage,
+    totalConversations,
+    compactedThreads: uniqueSummaryConversationIds.length,
+    summaryRecordCount,
+    weeklyReportCount,
+    lastCompactionAt:
+      typeof lastSummary?.createdAt === "number" ? lastSummary.createdAt : null,
+    indexedDbName: db.name,
+  };
 }
 
 export async function exportAllData(format: ExportFormat): Promise<ExportPayload> {

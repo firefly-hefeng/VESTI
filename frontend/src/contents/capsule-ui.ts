@@ -17,23 +17,36 @@ export const config: PlasmoCSConfig = {
 
 const STYLE_ID = "vesti-floating-style";
 const BUTTON_ID = "extension-floating-button";
+const FLOATING_BUTTON_DIAMETER = 43.2;
+const FLOATING_BUTTON_LOGO_SIZE = 21.6;
+const DEFAULT_RIGHT = 24;
+const DEFAULT_BOTTOM = 100;
+const VIEWPORT_MARGIN = 8;
+const DRAG_THRESHOLD_PX = 5;
 
 const STYLE_TEXT = `
 .floating-button {
   position: fixed;
-  right: 24px;
-  bottom: 100px;
+  right: ${DEFAULT_RIGHT}px;
+  bottom: ${DEFAULT_BOTTOM}px;
   z-index: 9999;
-  width: 48px;
-  height: 48px;
+  width: ${FLOATING_BUTTON_DIAMETER}px;
+  height: ${FLOATING_BUTTON_DIAMETER}px;
   border-radius: 50%;
   background-color: #ffffff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.floating-button.dragging {
+  cursor: grabbing;
+  transition: none;
 }
 
 .floating-button:hover {
@@ -47,11 +60,33 @@ const STYLE_TEXT = `
 }
 
 .button-logo {
-  width: 24px;
-  height: 24px;
+  width: ${FLOATING_BUTTON_LOGO_SIZE}px;
+  height: ${FLOATING_BUTTON_LOGO_SIZE}px;
   object-fit: contain;
 }
 `;
+
+const clamp = (value: number, min: number, max: number): number => {
+  const upperBound = Math.max(min, max);
+  return Math.min(Math.max(value, min), upperBound);
+};
+
+const getComputedPx = (element: HTMLElement, prop: "right" | "bottom", fallback: number): number => {
+  const raw = window.getComputedStyle(element)[prop];
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const clampButtonPosition = (button: HTMLDivElement) => {
+  const currentRight = getComputedPx(button, "right", DEFAULT_RIGHT);
+  const currentBottom = getComputedPx(button, "bottom", DEFAULT_BOTTOM);
+  const maxRight = window.innerWidth - FLOATING_BUTTON_DIAMETER - VIEWPORT_MARGIN;
+  const maxBottom = window.innerHeight - FLOATING_BUTTON_DIAMETER - VIEWPORT_MARGIN;
+  const nextRight = clamp(currentRight, VIEWPORT_MARGIN, maxRight);
+  const nextBottom = clamp(currentBottom, VIEWPORT_MARGIN, maxBottom);
+  button.style.right = `${nextRight}px`;
+  button.style.bottom = `${nextBottom}px`;
+};
 
 const ensureStyle = () => {
   if (document.getElementById(STYLE_ID)) {
@@ -95,8 +130,87 @@ const mount = () => {
   logo.src = LOGO_BASE64;
   logo.alt = "Extension Logo";
 
+  let isPointerDown = false;
+  let isDragging = false;
+  let activePointerId: number | null = null;
+  let startX = 0;
+  let startY = 0;
+  let startRight = DEFAULT_RIGHT;
+  let startBottom = DEFAULT_BOTTOM;
+
+  const resetPointerState = () => {
+    isPointerDown = false;
+    isDragging = false;
+    activePointerId = null;
+    button.classList.remove("dragging");
+  };
+
+  const onPointerDown = (event: PointerEvent) => {
+    if (!event.isPrimary || event.button !== 0 || activePointerId !== null) {
+      return;
+    }
+    isPointerDown = true;
+    isDragging = false;
+    activePointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    startRight = getComputedPx(button, "right", DEFAULT_RIGHT);
+    startBottom = getComputedPx(button, "bottom", DEFAULT_BOTTOM);
+    button.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  };
+
+  const onPointerMove = (event: PointerEvent) => {
+    if (!isPointerDown || activePointerId !== event.pointerId) {
+      return;
+    }
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    if (!isDragging && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
+      isDragging = true;
+      button.classList.add("dragging");
+    }
+    if (!isDragging) {
+      return;
+    }
+
+    const maxRight = window.innerWidth - FLOATING_BUTTON_DIAMETER - VIEWPORT_MARGIN;
+    const maxBottom = window.innerHeight - FLOATING_BUTTON_DIAMETER - VIEWPORT_MARGIN;
+    const nextRight = clamp(startRight - dx, VIEWPORT_MARGIN, maxRight);
+    const nextBottom = clamp(startBottom - dy, VIEWPORT_MARGIN, maxBottom);
+    button.style.right = `${nextRight}px`;
+    button.style.bottom = `${nextBottom}px`;
+    event.preventDefault();
+  };
+
+  const completePointerInteraction = (event: PointerEvent, triggerOpenOnTap: boolean) => {
+    if (activePointerId !== event.pointerId) {
+      return;
+    }
+    const shouldOpen = triggerOpenOnTap && isPointerDown && !isDragging;
+    if (button.hasPointerCapture(event.pointerId)) {
+      button.releasePointerCapture(event.pointerId);
+    }
+    resetPointerState();
+    clampButtonPosition(button);
+    if (shouldOpen) {
+      handleOpen();
+    }
+  };
+
+  const onPointerUp = (event: PointerEvent) => {
+    completePointerInteraction(event, true);
+  };
+
+  const onPointerCancel = (event: PointerEvent) => {
+    completePointerInteraction(event, false);
+  };
+
   button.appendChild(logo);
-  button.addEventListener("click", handleOpen);
+  button.addEventListener("pointerdown", onPointerDown);
+  button.addEventListener("pointermove", onPointerMove);
+  button.addEventListener("pointerup", onPointerUp);
+  button.addEventListener("pointercancel", onPointerCancel);
   button.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -105,6 +219,10 @@ const mount = () => {
   });
 
   document.body.appendChild(button);
+  clampButtonPosition(button);
+  window.addEventListener("resize", () => {
+    clampButtonPosition(button);
+  });
 };
 
 if (document.readyState === "loading") {
