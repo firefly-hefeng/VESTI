@@ -1,5 +1,6 @@
 import type { PlasmoCSConfig } from "plasmo";
 import { sendRequest } from "../lib/messaging/runtime";
+import { getUiSettings } from "../lib/services/uiSettingsService";
 import {
   DEFAULT_CAPSULE_SETTINGS,
   getCapsuleSettingsForHost,
@@ -8,7 +9,7 @@ import {
   type CapsuleSettings,
   type CapsuleViewMode,
 } from "../lib/services/capsuleSettingsService";
-import type { ActiveCaptureStatus, Platform } from "../lib/types";
+import type { ActiveCaptureStatus, Platform, UiThemeMode } from "../lib/types";
 import { LOGO_BASE64 } from "../lib/ui/logo";
 import { logger } from "../lib/utils/logger";
 
@@ -58,6 +59,7 @@ const DRAG_THRESHOLD_PX = 5;
 const VIEWPORT_MARGIN = 8;
 const COLLAPSED_SIZE = 43.2;
 const LOGO_SIZE = 21.6;
+const UI_SETTINGS_STORAGE_KEY = "vesti_ui_settings";
 const PRIMARY_ROLLOUT_HOSTS = new Set([
   "chatgpt.com",
   "chat.openai.com",
@@ -67,6 +69,12 @@ const PRIMARY_ROLLOUT_HOSTS = new Set([
   "chat.qwen.ai",
   "www.doubao.com",
 ]);
+
+interface PlatformTone {
+  bg: string;
+  text: string;
+  border: string;
+}
 
 const PLATFORM_BY_HOST: Record<string, Platform> = {
   "chatgpt.com": "ChatGPT",
@@ -78,13 +86,84 @@ const PLATFORM_BY_HOST: Record<string, Platform> = {
   "www.doubao.com": "Doubao",
 };
 
-const PLATFORM_COLOR: Record<Platform, string> = {
-  ChatGPT: "#10a37f",
-  Claude: "#d97706",
-  Gemini: "#2563eb",
-  DeepSeek: "#4f46e5",
-  Qwen: "#0f766e",
-  Doubao: "#db2777",
+const PLATFORM_TONE: Record<UiThemeMode, Record<Platform, PlatformTone>> = {
+  light: {
+    ChatGPT: {
+      bg: "hsl(146 46% 93%)",
+      text: "hsl(146 52% 28%)",
+      border: "hsl(146 32% 76%)",
+    },
+    Claude: {
+      bg: "hsl(22 86% 93%)",
+      text: "hsl(20 54% 42%)",
+      border: "hsl(21 55% 79%)",
+    },
+    Gemini: {
+      bg: "hsl(254 86% 95%)",
+      text: "hsl(252 45% 47%)",
+      border: "hsl(252 52% 82%)",
+    },
+    DeepSeek: {
+      bg: "hsl(222 90% 95%)",
+      text: "hsl(222 62% 44%)",
+      border: "hsl(222 63% 81%)",
+    },
+    Qwen: {
+      bg: "hsl(242 88% 95%)",
+      text: "hsl(242 56% 46%)",
+      border: "hsl(242 58% 82%)",
+    },
+    Doubao: {
+      bg: "hsl(210 100% 95%)",
+      text: "hsl(212 66% 44%)",
+      border: "hsl(211 69% 81%)",
+    },
+  },
+  dark: {
+    ChatGPT: {
+      bg: "hsl(158 33% 18%)",
+      text: "hsl(150 50% 66%)",
+      border: "hsl(154 30% 33%)",
+    },
+    Claude: {
+      bg: "hsl(18 44% 20%)",
+      text: "hsl(18 58% 66%)",
+      border: "hsl(18 33% 34%)",
+    },
+    Gemini: {
+      bg: "hsl(252 35% 20%)",
+      text: "hsl(252 80% 76%)",
+      border: "hsl(252 34% 35%)",
+    },
+    DeepSeek: {
+      bg: "hsl(224 44% 20%)",
+      text: "hsl(222 88% 75%)",
+      border: "hsl(223 35% 35%)",
+    },
+    Qwen: {
+      bg: "hsl(242 42% 20%)",
+      text: "hsl(242 88% 76%)",
+      border: "hsl(242 33% 35%)",
+    },
+    Doubao: {
+      bg: "hsl(211 46% 20%)",
+      text: "hsl(211 90% 76%)",
+      border: "hsl(211 37% 35%)",
+    },
+  },
+};
+
+const FALLBACK_PLATFORM_TONE: Record<UiThemeMode, PlatformTone> = {
+  light: {
+    bg: "hsl(220 20% 93%)",
+    text: "hsl(220 16% 36%)",
+    border: "hsl(220 20% 83%)",
+  },
+  dark: {
+    bg: "hsl(220 17% 22%)",
+    text: "hsl(220 19% 73%)",
+    border: "hsl(220 16% 36%)",
+  },
 };
 
 const ERROR_MESSAGE_MAP: Record<string, string> = {
@@ -100,18 +179,99 @@ const ERROR_MESSAGE_MAP: Record<string, string> = {
   content_unreachable: "Capture context is temporarily unreachable.",
 };
 
+const normalizeThemeMode = (value: unknown): UiThemeMode =>
+  value === "dark" ? "dark" : "light";
+
+const parseThemeModeFromStorageValue = (value: unknown): UiThemeMode => {
+  if (!value || typeof value !== "object") return "light";
+  return normalizeThemeMode((value as { themeMode?: unknown }).themeMode);
+};
+
+const resolvePlatformTone = (
+  platform: Platform | undefined,
+  themeMode: UiThemeMode
+): PlatformTone => {
+  if (!platform) return FALLBACK_PLATFORM_TONE[themeMode];
+  return PLATFORM_TONE[themeMode][platform] ?? FALLBACK_PLATFORM_TONE[themeMode];
+};
+
 const SHADOW_STYLE = `
 :host {
   all: initial;
 }
 
 .capsule-shell {
+  --capsule-bg: #f7f6f3;
+  --capsule-bg2: #eeecea;
+  --capsule-bg3: #e8e6e2;
+  --capsule-border: #e5e4e0;
+  --capsule-divider: #eeecea;
+  --capsule-text1: #1a1a1a;
+  --capsule-text2: #9f9f9f;
+  --capsule-text3: #c8c8c8;
+  --capsule-shadow: 0 12px 40px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.12);
+  --capsule-shadow-hover: 0 14px 42px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.14);
+  --status-held-bg: rgba(180, 120, 20, 0.09);
+  --status-held-text: #8a6200;
+  --status-held-border: rgba(180, 120, 20, 0.2);
+  --status-live-bg: rgba(45, 106, 63, 0.09);
+  --status-live-text: #2d6a3f;
+  --status-live-border: rgba(45, 106, 63, 0.2);
+  --status-ready-bg: rgba(124, 58, 237, 0.08);
+  --status-ready-text: #7c3aed;
+  --status-ready-border: rgba(124, 58, 237, 0.18);
+  --status-neutral-bg: rgba(71, 85, 105, 0.08);
+  --status-neutral-text: #677489;
+  --status-neutral-border: rgba(71, 85, 105, 0.16);
+  --status-error-bg: rgba(220, 38, 38, 0.08);
+  --status-error-text: #b91c1c;
+  --status-error-border: rgba(220, 38, 38, 0.2);
+  --btn-primary-bg: #1a1a1a;
+  --btn-primary-text: #f7f6f3;
+  --btn-secondary-bg: #eeecea;
+  --btn-secondary-text: #9f9f9f;
+  --btn-secondary-border: #e5e4e0;
   position: fixed;
   pointer-events: auto;
   touch-action: none;
   z-index: ${CAPSULE_Z_INDEX};
-  font-family: "Segoe UI", "PingFang SC", sans-serif;
-  color: #0f172a;
+  font-family: "Vesti Sans UI", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  color: var(--capsule-text1);
+  color-scheme: light;
+}
+
+.capsule-shell[data-theme="dark"] {
+  --capsule-bg: #141414;
+  --capsule-bg2: #1c1c1c;
+  --capsule-bg3: #222222;
+  --capsule-border: #252525;
+  --capsule-divider: #1c1c1c;
+  --capsule-text1: #e8e6e0;
+  --capsule-text2: #555555;
+  --capsule-text3: #333333;
+  --capsule-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --capsule-shadow-hover: 0 14px 42px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.24);
+  --status-held-bg: rgba(200, 140, 40, 0.13);
+  --status-held-text: #c8960a;
+  --status-held-border: rgba(200, 140, 40, 0.22);
+  --status-live-bg: rgba(58, 122, 74, 0.14);
+  --status-live-text: #4a9a5c;
+  --status-live-border: rgba(58, 122, 74, 0.22);
+  --status-ready-bg: rgba(167, 139, 250, 0.12);
+  --status-ready-text: #a78bfa;
+  --status-ready-border: rgba(167, 139, 250, 0.22);
+  --status-neutral-bg: rgba(148, 163, 184, 0.1);
+  --status-neutral-text: #a0aec0;
+  --status-neutral-border: rgba(148, 163, 184, 0.22);
+  --status-error-bg: rgba(248, 113, 113, 0.14);
+  --status-error-text: #fca5a5;
+  --status-error-border: rgba(248, 113, 113, 0.3);
+  --btn-primary-bg: #e8e6e0;
+  --btn-primary-text: #141414;
+  --btn-secondary-bg: #1c1c1c;
+  --btn-secondary-text: #555555;
+  --btn-secondary-border: #252525;
+  color-scheme: dark;
 }
 
 .capsule-shell.is-dragging,
@@ -123,21 +283,22 @@ const SHADOW_STYLE = `
 .capsule-collapsed {
   width: ${COLLAPSED_SIZE}px;
   height: ${COLLAPSED_SIZE}px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
+  border: 1px solid var(--capsule-border);
   border-radius: 9999px;
-  background: #ffffff;
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16), 0 4px 10px rgba(15, 23, 42, 0.12);
+  background: var(--capsule-bg);
+  box-shadow: var(--capsule-shadow);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 120ms ease, box-shadow 120ms ease;
-  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  cursor: grab;
   padding: 0;
+  touch-action: none;
 }
 
 .capsule-collapsed:hover {
   transform: translateY(-1px) scale(1.02);
-  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.2), 0 5px 12px rgba(15, 23, 42, 0.14);
+  box-shadow: var(--capsule-shadow-hover);
 }
 
 .capsule-collapsed:active {
@@ -153,13 +314,13 @@ const SHADOW_STYLE = `
 }
 
 .capsule-panel {
-  width: 292px;
+  width: min(320px, calc(100vw - 16px));
   box-sizing: border-box;
-  border: 1px solid rgba(15, 23, 42, 0.12);
+  border: 1px solid var(--capsule-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18), 0 4px 14px rgba(15, 23, 42, 0.12);
-  padding: 10px;
+  background: var(--capsule-bg);
+  box-shadow: var(--capsule-shadow);
+  overflow: hidden;
 }
 
 .capsule-shell[data-view="collapsed"] .capsule-panel {
@@ -173,43 +334,58 @@ const SHADOW_STYLE = `
 .capsule-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  padding: 13px 14px 11px;
+  border-bottom: 1px solid var(--capsule-divider);
 }
 
 .capsule-drag-handle {
   cursor: grab;
-  display: inline-flex;
+  min-width: 0;
+  flex: 1;
+  display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .capsule-title {
-  font-size: 13px;
-  line-height: 1.2;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-family: "Vesti Title Serif", "Tiempos Headline", Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: -0.02em;
 }
 
 .capsule-platform {
-  font-size: 11px;
-  line-height: 1;
+  font-size: 9.5px;
+  line-height: 1.2;
   font-weight: 700;
-  color: #ffffff;
-  padding: 4px 8px;
-  border-radius: 9999px;
+  letter-spacing: 0.2px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid transparent;
 }
 
 .capsule-collapse-btn {
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 8px;
-  background: #f8fafc;
-  color: #334155;
-  font-size: 12px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--capsule-text2);
+  font-size: 11px;
   line-height: 1;
-  padding: 5px 8px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.capsule-collapse-btn:hover {
+  background: var(--capsule-bg3);
+  color: var(--capsule-text1);
 }
 
 .capsule-status-row {
@@ -217,137 +393,475 @@ const SHADOW_STYLE = `
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  padding: 11px 14px 0;
+  margin-bottom: 10px;
 }
 
 .capsule-status-badge {
-  font-size: 12px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  line-height: 1.1;
   font-weight: 700;
-  padding: 5px 8px;
-  border-radius: 9999px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 20px;
   border: 1px solid transparent;
 }
 
-.capsule-status-badge[data-state="idle"] {
-  color: #475569;
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+.capsule-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
 }
 
-.capsule-status-badge[data-state="mirroring"] {
-  color: #065f46;
-  background: #d1fae5;
-  border-color: #a7f3d0;
+.capsule-status-badge[data-state="idle"] {
+  color: var(--status-neutral-text);
+  background: var(--status-neutral-bg);
+  border-color: var(--status-neutral-border);
 }
 
 .capsule-status-badge[data-state="holding"] {
-  color: #92400e;
-  background: #fef3c7;
-  border-color: #fde68a;
+  color: var(--status-held-text);
+  background: var(--status-held-bg);
+  border-color: var(--status-held-border);
 }
 
 .capsule-status-badge[data-state="ready_to_archive"] {
-  color: #1d4ed8;
-  background: #dbeafe;
-  border-color: #bfdbfe;
+  color: var(--status-ready-text);
+  background: var(--status-ready-bg);
+  border-color: var(--status-ready-border);
 }
 
+.capsule-status-badge[data-state="mirroring"],
 .capsule-status-badge[data-state="archiving"] {
-  color: #312e81;
-  background: #e0e7ff;
-  border-color: #c7d2fe;
+  color: var(--status-live-text);
+  background: var(--status-live-bg);
+  border-color: var(--status-live-border);
 }
 
 .capsule-status-badge[data-state="saved"] {
-  color: #166534;
-  background: #dcfce7;
-  border-color: #bbf7d0;
+  color: var(--status-live-text);
+  background: var(--status-live-bg);
+  border-color: var(--status-live-border);
 }
 
 .capsule-status-badge[data-state="error"] {
-  color: #991b1b;
-  background: #fee2e2;
-  border-color: #fecaca;
+  color: var(--status-error-text);
+  background: var(--status-error-bg);
+  border-color: var(--status-error-border);
 }
 
 .capsule-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  padding: 0 14px;
+  margin-bottom: 10px;
 }
 
 .capsule-metric {
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 10px;
-  background: #f8fafc;
-  padding: 6px 8px;
+  border: 1px solid var(--capsule-divider);
+  border-radius: 9px;
+  background: var(--capsule-bg2);
+  padding: 8px 10px;
   display: grid;
   gap: 4px;
 }
 
 .capsule-metric-label {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--capsule-text2);
+}
+
+.capsule-domain-label {
   font-size: 11px;
   line-height: 1;
-  color: #475569;
+  letter-spacing: 0.01em;
+  color: var(--capsule-text2);
 }
 
 .capsule-metric-value {
-  font-size: 14px;
-  line-height: 1.1;
-  font-weight: 700;
-  color: #0f172a;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--capsule-text1);
+  font-variant-numeric: tabular-nums;
+}
+
+.capsule-metric-value.is-empty {
+  font-size: 16px;
+  color: var(--capsule-text3);
 }
 
 .capsule-reason {
-  min-height: 16px;
-  font-size: 12px;
-  line-height: 1.3;
-  color: #475569;
-  margin-bottom: 8px;
+  min-height: 17px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--capsule-text2);
+  margin-bottom: 12px;
+  padding: 0 14px;
 }
 
 .capsule-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  gap: 7px;
+  padding: 0 14px 14px;
 }
 
 .capsule-action-btn {
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  border-radius: 10px;
-  padding: 7px 10px;
-  font-size: 12px;
+  flex: 1;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 12.5px;
   line-height: 1;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0.005em;
   cursor: pointer;
-  background: #f8fafc;
-  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  transition: opacity 120ms ease;
 }
 
 .capsule-action-btn:hover:enabled {
-  background: #f1f5f9;
+  opacity: 0.82;
 }
 
 .capsule-action-btn:disabled {
   cursor: not-allowed;
-  color: #94a3b8;
-  background: #f8fafc;
+  opacity: 0.35;
 }
 
 .capsule-action-btn.is-primary {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  flex: 1.4;
+  background: var(--btn-primary-bg);
+  border-color: transparent;
+  color: var(--btn-primary-text);
 }
 
-.capsule-action-btn.is-primary:hover:enabled {
-  background: #1d4ed8;
+.capsule-action-btn:not(.is-primary) {
+  border-color: var(--btn-secondary-border);
+}
+
+.capsule-status-badge[data-state="mirroring"] .capsule-status-dot,
+.capsule-status-badge[data-state="archiving"] .capsule-status-dot,
+.capsule-status-badge[data-state="saved"] .capsule-status-dot {
+  animation: capsule-live-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes capsule-live-blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.capsule-shell.is-dragging .capsule-collapsed,
+.capsule-shell.is-dragging .capsule-panel {
+  transition: none !important;
 }
 
 .fallback-shell .capsule-collapsed {
   cursor: pointer;
+}
+
+.fallback-shell .capsule-panel {
+  display: none !important;
+}
+
+.capsule-shell[data-theme="dark"] .capsule-collapsed {
+  box-shadow: var(--capsule-shadow);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-panel {
+  box-shadow: var(--capsule-shadow);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-collapse-btn:hover {
+  background: var(--capsule-bg3);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-action-btn:hover:enabled {
+  opacity: 0.82;
+}
+
+.capsule-shell[data-theme="dark"] .capsule-domain-label,
+.capsule-shell[data-theme="dark"] .capsule-metric-label,
+.capsule-shell[data-theme="dark"] .capsule-reason {
+  color: var(--capsule-text2);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-metric-value.is-empty {
+  color: var(--capsule-text3);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-collapse-btn {
+  color: var(--capsule-text2);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-collapse-btn:hover {
+  color: var(--capsule-text1);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-action-btn:not(.is-primary) {
+  border-color: var(--btn-secondary-border);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="idle"] {
+  color: var(--status-neutral-text);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="error"] {
+  color: var(--status-error-text);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="holding"] {
+  color: var(--status-held-text);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="ready_to_archive"] {
+  color: var(--status-ready-text);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="mirroring"],
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="archiving"],
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="saved"] {
+  color: var(--status-live-text);
+}
+
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="idle"],
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="error"],
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="holding"],
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="ready_to_archive"],
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="mirroring"],
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="archiving"],
+.capsule-shell[data-theme="dark"] .capsule-status-badge[data-state="saved"] {
+  border-style: solid;
+}
+
+.capsule-shell[data-theme="light"] .capsule-status-badge[data-state="idle"],
+.capsule-shell[data-theme="light"] .capsule-status-badge[data-state="error"],
+.capsule-shell[data-theme="light"] .capsule-status-badge[data-state="holding"],
+.capsule-shell[data-theme="light"] .capsule-status-badge[data-state="ready_to_archive"],
+.capsule-shell[data-theme="light"] .capsule-status-badge[data-state="mirroring"],
+.capsule-shell[data-theme="light"] .capsule-status-badge[data-state="archiving"],
+.capsule-shell[data-theme="light"] .capsule-status-badge[data-state="saved"] {
+  border-style: solid;
+}
+
+.capsule-shell[data-view="expanded"] {
+  cursor: default;
+}
+
+.capsule-shell[data-view="collapsed"] .capsule-collapsed {
+  cursor: grab;
+}
+
+.capsule-shell[data-view="collapsed"].is-dragging .capsule-collapsed {
+  cursor: grabbing;
+}
+
+.capsule-shell[data-view="expanded"].is-dragging .capsule-drag-handle {
+  cursor: grabbing !important;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-drag-handle {
+  cursor: grab;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-collapse-btn {
+  flex-shrink: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-platform {
+  flex-shrink: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-title {
+  flex-shrink: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-drag-handle {
+  overflow: hidden;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-title,
+.capsule-shell[data-view="expanded"] .capsule-platform,
+.capsule-shell[data-view="expanded"] .capsule-domain-label {
+  white-space: nowrap;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-domain-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-actions .capsule-action-btn {
+  white-space: nowrap;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-reason {
+  word-break: break-word;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-metric-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-metric-label {
+  white-space: nowrap;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-status-badge {
+  white-space: nowrap;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-status-row {
+  min-width: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-status-badge {
+  max-width: 160px;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-status-badge .capsule-status-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-status-badge {
+  overflow: hidden;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-status-dot {
+  flex-shrink: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-status-label {
+  min-width: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-metrics,
+.capsule-shell[data-view="expanded"] .capsule-actions {
+  min-width: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-action-btn {
+  min-width: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-panel {
+  min-width: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-header {
+  min-width: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-drag-handle {
+  min-width: 0;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-title {
+  color: var(--capsule-text1);
+}
+
+.capsule-shell[data-view="expanded"] .capsule-collapse-btn {
+  color: var(--capsule-text2);
+}
+
+.capsule-shell[data-view="expanded"] .capsule-collapse-btn:hover {
+  color: var(--capsule-text1);
+}
+
+.capsule-shell[data-view="expanded"] .capsule-status-row,
+.capsule-shell[data-view="expanded"] .capsule-metrics,
+.capsule-shell[data-view="expanded"] .capsule-reason,
+.capsule-shell[data-view="expanded"] .capsule-actions {
+  box-sizing: border-box;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-panel,
+.capsule-shell[data-view="collapsed"] .capsule-collapsed {
+  -webkit-font-smoothing: antialiased;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-panel {
+  text-rendering: optimizeLegibility;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-header {
+  background: transparent;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-reason {
+  transition: opacity 0.2s;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-panel {
+  border-color: var(--capsule-border);
+}
+
+.capsule-shell[data-view="expanded"] .capsule-metric {
+  border-color: var(--capsule-divider);
+}
+
+.capsule-shell[data-view="expanded"] .capsule-header {
+  border-bottom-color: var(--capsule-divider);
+}
+
+.capsule-shell[data-view="expanded"] .capsule-action-btn.is-primary {
+  border-color: transparent;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-action-btn:not(.is-primary) {
+  border-color: var(--btn-secondary-border);
+}
+
+.capsule-shell[data-view="expanded"] .capsule-collapsed {
+  display: none;
+}
+
+.capsule-shell[data-view="collapsed"] .capsule-panel {
+  display: none;
+}
+
+.capsule-shell[data-view="collapsed"] .capsule-collapsed {
+  display: inline-flex;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-panel {
+  display: block;
+}
+
+.capsule-shell[data-view="expanded"] .capsule-collapse-btn:focus-visible,
+.capsule-shell[data-view="expanded"] .capsule-action-btn:focus-visible,
+.capsule-shell[data-view="collapsed"] .capsule-collapsed:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+}
+
+.capsule-shell[data-theme="dark"][data-view="expanded"] .capsule-collapse-btn:focus-visible,
+.capsule-shell[data-theme="dark"][data-view="expanded"] .capsule-action-btn:focus-visible,
+.capsule-shell[data-theme="dark"][data-view="collapsed"] .capsule-collapsed:focus-visible {
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.32);
 }
 `;
 
@@ -434,6 +948,17 @@ const mount = async () => {
     });
   }
 
+  let themeMode: UiThemeMode = "light";
+  try {
+    const uiSettings = await getUiSettings();
+    themeMode = normalizeThemeMode(uiSettings.themeMode);
+  } catch (error) {
+    logger.warn("content", "Failed to load UI theme settings, fallback to light", {
+      host: hostname,
+      error: (error as Error).message,
+    });
+  }
+
   if (!settings.enabled || settings.hiddenHosts.includes(hostname)) {
     logger.info("content", "Capsule hidden by settings", { host: hostname });
     return;
@@ -456,6 +981,7 @@ const mount = async () => {
   shell.className = isPrimaryRolloutHost ? "capsule-shell" : "capsule-shell fallback-shell";
   shell.dataset.view = "collapsed";
   shell.dataset.state = "idle";
+  shell.dataset.theme = themeMode;
   shadow.appendChild(shell);
 
   const collapsedButton = document.createElement("button");
@@ -486,15 +1012,16 @@ const mount = async () => {
 
   const title = document.createElement("span");
   title.className = "capsule-title";
-  title.textContent = "Vesti Capsule";
+  title.textContent = "Vesti";
 
   const platformBadge = document.createElement("span");
   platformBadge.className = "capsule-platform";
   platformBadge.textContent = resolvePlatform(hostname) ?? "Unknown";
   const initialPlatform = resolvePlatform(hostname);
-  platformBadge.style.backgroundColor = initialPlatform
-    ? PLATFORM_COLOR[initialPlatform]
-    : "#475569";
+  const initialPlatformTone = resolvePlatformTone(initialPlatform, themeMode);
+  platformBadge.style.backgroundColor = initialPlatformTone.bg;
+  platformBadge.style.color = initialPlatformTone.text;
+  platformBadge.style.borderColor = initialPlatformTone.border;
 
   dragHandle.appendChild(title);
   dragHandle.appendChild(platformBadge);
@@ -502,7 +1029,9 @@ const mount = async () => {
   const collapseBtn = document.createElement("button");
   collapseBtn.type = "button";
   collapseBtn.className = "capsule-collapse-btn";
-  collapseBtn.textContent = "Collapse";
+  collapseBtn.textContent = "^";
+  collapseBtn.setAttribute("aria-label", "Collapse capsule");
+  collapseBtn.title = "Collapse";
 
   header.appendChild(dragHandle);
   header.appendChild(collapseBtn);
@@ -513,10 +1042,16 @@ const mount = async () => {
   const statusBadge = document.createElement("span");
   statusBadge.className = "capsule-status-badge";
   statusBadge.dataset.state = "idle";
-  statusBadge.textContent = "Unavailable";
+  const statusDot = document.createElement("span");
+  statusDot.className = "capsule-status-dot";
+  const statusLabel = document.createElement("span");
+  statusLabel.className = "capsule-status-label";
+  statusLabel.textContent = "Unavailable";
+  statusBadge.appendChild(statusDot);
+  statusBadge.appendChild(statusLabel);
 
   const statusHost = document.createElement("span");
-  statusHost.className = "capsule-metric-label";
+  statusHost.className = "capsule-domain-label";
   statusHost.textContent = hostname;
 
   statusRow.appendChild(statusBadge);
@@ -531,7 +1066,7 @@ const mount = async () => {
   messagesLabel.className = "capsule-metric-label";
   messagesLabel.textContent = "Messages";
   const messagesValue = document.createElement("span");
-  messagesValue.className = "capsule-metric-value";
+  messagesValue.className = "capsule-metric-value is-empty";
   messagesValue.textContent = "--";
   messagesMetric.appendChild(messagesLabel);
   messagesMetric.appendChild(messagesValue);
@@ -542,7 +1077,7 @@ const mount = async () => {
   turnsLabel.className = "capsule-metric-label";
   turnsLabel.textContent = "Turns";
   const turnsValue = document.createElement("span");
-  turnsValue.className = "capsule-metric-value";
+  turnsValue.className = "capsule-metric-value is-empty";
   turnsValue.textContent = "--";
   turnsMetric.appendChild(turnsLabel);
   turnsMetric.appendChild(turnsValue);
@@ -739,6 +1274,7 @@ const mount = async () => {
     uiState = deriveUiState();
     shell.dataset.view = viewMode;
     shell.dataset.state = uiState;
+    shell.dataset.theme = themeMode;
 
     if (!isPrimaryRolloutHost) {
       shell.classList.add("fallback-shell");
@@ -748,21 +1284,28 @@ const mount = async () => {
     panel.hidden = viewMode !== "expanded";
     collapsedButton.hidden = viewMode === "expanded";
     statusBadge.dataset.state = uiState;
-    statusBadge.textContent = labelForState(uiState);
+    statusLabel.textContent = labelForState(uiState);
 
     const platform =
       runtimeStatus?.platform ?? resolvePlatform(hostname) ?? "ChatGPT";
     platformBadge.textContent = platform;
-    platformBadge.style.backgroundColor = PLATFORM_COLOR[platform] ?? "#475569";
+    const platformTone = resolvePlatformTone(platform, themeMode);
+    platformBadge.style.backgroundColor = platformTone.bg;
+    platformBadge.style.color = platformTone.text;
+    platformBadge.style.borderColor = platformTone.border;
 
-    messagesValue.textContent =
+    const nextMessageCount =
       typeof runtimeStatus?.messageCount === "number"
         ? String(runtimeStatus.messageCount)
         : "--";
-    turnsValue.textContent =
+    const nextTurnCount =
       typeof runtimeStatus?.turnCount === "number"
         ? String(runtimeStatus.turnCount)
         : "--";
+    messagesValue.textContent = nextMessageCount;
+    turnsValue.textContent = nextTurnCount;
+    messagesValue.classList.toggle("is-empty", nextMessageCount === "--");
+    turnsValue.classList.toggle("is-empty", nextTurnCount === "--");
 
     archiveBtn.disabled = uiState !== "ready_to_archive";
     archiveBtn.textContent = uiState === "archiving" ? "Archiving..." : "Archive now";
@@ -1009,6 +1552,25 @@ const mount = async () => {
     shell.classList.remove("is-dragging");
   };
 
+  const onStorageChanged = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    areaName: string
+  ) => {
+    if (destroyed || areaName !== "local") return;
+    const uiThemeChange = changes[UI_SETTINGS_STORAGE_KEY];
+    if (!uiThemeChange) return;
+
+    const nextTheme = parseThemeModeFromStorageValue(uiThemeChange.newValue);
+    if (nextTheme === themeMode) return;
+    themeMode = nextTheme;
+    renderCapsule();
+    syncPosition();
+    logger.info("content", "Capsule theme updated", {
+      host: hostname,
+      themeMode,
+    });
+  };
+
   const onResize = () => {
     syncPosition();
   };
@@ -1027,6 +1589,9 @@ const mount = async () => {
     window.removeEventListener("resize", onResize);
     window.removeEventListener("pagehide", destroy);
     window.removeEventListener("beforeunload", destroy);
+    if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
+      chrome.storage.onChanged.removeListener(onStorageChanged);
+    }
     host.remove();
   };
 
@@ -1094,6 +1659,9 @@ const mount = async () => {
   window.addEventListener("resize", onResize);
   window.addEventListener("pagehide", destroy);
   window.addEventListener("beforeunload", destroy);
+  if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener(onStorageChanged);
+  }
 
   renderCapsule();
   syncPosition();
