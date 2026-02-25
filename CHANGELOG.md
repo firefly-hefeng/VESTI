@@ -27,6 +27,28 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ---
 
+## [1.2.0-rc.2] - 2026-02-25
+
+### Added
+- Added v1.5-lite floating capsule shell baseline with Shadow DOM isolation, collapsed/expanded views, runtime status polling, and in-capsule action wiring (`Archive now`, `Open Dock`).
+- Added host-scoped capsule settings service persisted to `chrome.storage.local` under `vesti_capsule_settings`.
+
+### Changed
+- Expanded capsule primary rollout hosts from partial whitelist to all currently supported chat platforms (ChatGPT, Claude, Gemini, DeepSeek, Qwen, Doubao).
+- Kept draggable hotfix behavior as default: collapsed capsule is directly draggable with 5px anti-misfire threshold and post-drag click suppression.
+
+### Fixed
+- Fixed capsule drag regression that blocked viewport repositioning on primary hosts.
+- Disabled native image drag on capsule logo to avoid dragging into composer inputs as text/image payload.
+
+### Docs
+- _None yet_
+
+### Chore
+- _None yet_
+
+---
+
 ## [1.2.0-rc.1] - 2026-02-25
 
 ### Added
@@ -141,7 +163,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ---
 
-[Unreleased]: https://github.com/abraxas914/VESTI/compare/v1.2.0-rc.1...HEAD
+[Unreleased]: https://github.com/abraxas914/VESTI/compare/v1.2.0-rc.2...HEAD
+[1.2.0-rc.2]: https://github.com/abraxas914/VESTI/releases/tag/v1.2.0-rc.2
 [1.2.0-rc.1]: https://github.com/abraxas914/VESTI/releases/tag/v1.2.0-rc.1
 [1.1.0-rc.4]: https://github.com/abraxas914/VESTI/releases/tag/v1.1.0-rc.4
 [1.0.0]: https://github.com/abraxas914/VESTI/releases/tag/v1.0.0
