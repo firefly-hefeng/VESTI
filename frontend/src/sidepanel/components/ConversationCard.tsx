@@ -17,7 +17,12 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import { resolveTurnCount } from "~lib/capture/turn-metrics";
 import type { Conversation } from "~lib/types";
 import { updateConversationAndSync } from "~lib/services/syncActions";
@@ -26,10 +31,6 @@ import { PlatformTag } from "./PlatformTag";
 const TOOLTIP_DELAY_MS = 200;
 const COPY_FEEDBACK_MS = 1500;
 const MAX_TITLE_LENGTH = 120;
-const DropdownMenu = DropdownMenuPrimitive.Root;
-const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
-const DropdownMenuContent = DropdownMenuPrimitive.Content;
-const DropdownMenuItem = DropdownMenuPrimitive.Item;
 
 function formatRelativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
