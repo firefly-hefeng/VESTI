@@ -37,51 +37,6 @@
   https://github.com/user-attachments/assets/3d702080-91c8-4461-8566-92e1bd82f05e
 
   <b>🎥 视频演示：捕获对话与其他试验功能</b>
-  <br>
-```mermaid
-flowchart TB
-    subgraph EXT["🧩 捕获引擎层 Chrome Extension"]
-        direction TB
-        CS["Content Scripts\nPlatform Parsers\nObserver / Gate"]
-        BG["Background Router\n消息分发 · 路由"]
-        OF["Offscreen Handlers\n隔离异步计算"]
-        CAP["Capsule\nShadow DOM · 状态胶囊"]
-        DB[("Dexie IndexedDB\nconversations · messages\nvectors · topics · notes")]
-
-        CS -->|"捕获事件"| BG
-        BG -->|"任务分发"| OF
-        OF -->|"向量化 · 摘要生成"| DB
-        BG -->|"存储读写"| DB
-        CAP -->|"状态轮询\nGET_ACTIVE_CAPTURE_STATUS"| BG
-    end
-
-    subgraph API["☁️ AI 基础设施"]
-        direction LR
-        LLM["ModelScope LLM\nDeepSeek-R1 / Qwen3"]
-        EMB["ModelScope Embedding\ntext-embedding-v1 · 768维"]
-    end
-
-    subgraph WEB["🌐 知识管理层 Web Dashboard"]
-        direction TB
-        SA["StorageApi 契约接口"]
-        LIB["📚 Library\n对话库 · 主题分类"]
-        EXP["🔍 Explore\nRAG 知识问答"]
-        NET["🌌 Network\n思维图谱可视化"]
-        NOT["📝 Notes\n策展笔记"]
-
-        SA --> LIB
-        SA --> EXP
-        SA --> NET
-        SA --> NOT
-    end
-
-    OF -->|"LLM 调用\nFallback Hierarchy"| LLM
-    OF -->|"Embedding 调用\n增量向量化"| EMB
-    DB -->|"Chrome Message Protocol"| SA
-
-    style EXT fill:#FDF6EC,stroke:#D4A96A,stroke-width:1.5px
-    style WEB fill:#F0F4FF,stroke:#7B9ED9,stroke-width:1.5px
-    style API fill:#F5F5F5,stroke:#AAAAAA,stroke-width:1.5px
 
   <br><br>
 
