@@ -82,7 +82,7 @@ const FONT_UI_CJK_500_URL = new URL(
   import.meta.url
 ).toString();
 const FONT_UI_CJK_600_URL = new URL(
-  "../../public/fonts/SourceHanSansSC-UI-600.woff2",
+  "../../public/fonts/SourceHanSansSC-UI-500.woff2",
   import.meta.url
 ).toString();
 const FONT_TITLE_400_URL = new URL(

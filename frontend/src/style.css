@@ -6,9 +6,6 @@
 @import "@fontsource/newsreader/400.css";
 @import "@fontsource/newsreader/500.css";
 @import "@fontsource/newsreader/600.css";
-@import "@fontsource/noto-serif-sc/400.css";
-@import "@fontsource/noto-serif-sc/500.css";
-@import "@fontsource/noto-serif-sc/700.css";
 @import "@fontsource/nunito-sans/400.css";
 @import "@fontsource/nunito-sans/500.css";
 @import "@fontsource/nunito-sans/600.css";
@@ -60,7 +57,7 @@
 
 @font-face {
   font-family: "Vesti Sans UI";
-  src: url("../public/fonts/SourceHanSansSC-UI-600.woff2") format("woff2");
+  src: url("../public/fonts/SourceHanSansSC-UI-500.woff2") format("woff2");
   font-style: normal;
   font-weight: 600;
   font-display: swap;
