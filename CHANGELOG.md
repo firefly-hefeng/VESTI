@@ -27,6 +27,27 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ---
 
+## [1.2.0-rc.3] - 2026-02-27
+
+### Added
+- _None yet_
+
+### Changed
+- Updated `@vesti/ui` build chain to use a stable invocation path without `pnpm exec esbuild` dependency coupling.
+- Added explicit `esbuild` dependency in `frontend` to guarantee CI binary availability during packaging.
+- Refreshed frontend dependency sync after `prebuild` so `file:` package snapshots stay aligned in CI packaging runs.
+
+### Fixed
+- Stabilized CI release packaging path to avoid intermittent `esbuild not found` and `@vesti/ui` resolve failures.
+
+### Docs
+- _None yet_
+
+### Chore
+- _None yet_
+
+---
+
 ## [1.2.0-rc.2] - 2026-02-25
 
 ### Added
@@ -168,7 +189,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ---
 
-[Unreleased]: https://github.com/abraxas914/VESTI/compare/v1.2.0-rc.2...HEAD
+[Unreleased]: https://github.com/abraxas914/VESTI/compare/v1.2.0-rc.3...HEAD
+[1.2.0-rc.3]: https://github.com/abraxas914/VESTI/releases/tag/v1.2.0-rc.3
 [1.2.0-rc.2]: https://github.com/abraxas914/VESTI/releases/tag/v1.2.0-rc.2
 [1.2.0-rc.1]: https://github.com/abraxas914/VESTI/releases/tag/v1.2.0-rc.1
 [1.1.0-rc.4]: https://github.com/abraxas914/VESTI/releases/tag/v1.1.0-rc.4
