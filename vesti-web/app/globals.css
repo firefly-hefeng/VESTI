@@ -31,9 +31,11 @@
   
   /* Platform Colors */
   --platform-chatgpt: #10A37F;
-  --platform-claude: #D97757;
-  --platform-gemini: #4285F4;
-  --platform-deepseek: #1565C0;
+  --platform-claude: #CC785C;
+  --platform-gemini: #AD89EB;
+  --platform-deepseek: #0D28F3;
+  --platform-qwen: #615CED;
+  --platform-doubao: #1E6FFF;
   
   /* Borders */
   --border-default: #E5E3DB;
@@ -69,6 +71,8 @@
   --color-platform-claude: var(--platform-claude);
   --color-platform-gemini: var(--platform-gemini);
   --color-platform-deepseek: var(--platform-deepseek);
+  --color-platform-qwen: var(--platform-qwen);
+  --color-platform-doubao: var(--platform-doubao);
   --color-border-default: var(--border-default);
   --color-border-subtle: var(--border-subtle);
   
