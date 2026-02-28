@@ -2,7 +2,7 @@
 
 状态：Active  
 生效范围：自 `v1.0.0` 之后的全部开发与发布  
-最后更新：2026-02-11
+最后更新：2026-02-28
 
 ---
 
@@ -55,6 +55,14 @@
 - 禁止 force push
 - 要求 PR review（至少 1 人）
 - 要求通过基础检查（build/typecheck）
+
+### 3.4 PR 治理与去混淆规则（强制）
+
+- 单 PR 单主题：禁止将 `embeddings + CI + observability` 等多主题混装到同一个 PR。
+- 同主题重复 PR 处理时限：新 PR 合并后 24 小时内关闭旧 PR，并在旧 PR 留言 `superseded by #<id>`。
+- 合并前必须完成基线重整：PR 分支需先 `rebase main` 或 `merge main`，避免陈旧分支直接合并。
+- 合并前范围核对：`git diff --name-only origin/main...HEAD` 必须与 PR 描述中的目标文件/范围一致。
+- 冲突/脏状态 PR（DIRTY）禁止带风险直合：必须先拆分成最小 PR 回收有效改动。
 
 ---
 
@@ -188,6 +196,10 @@ git push origin v1.0.1
 - 未更新 changelog 即发布
 - `package.json` 版本与发布 tag 不一致
 - 在 hotfix 分支混入无关功能
+- 重复 PR 长期并存且不标注 superseded 关系
+- 在一个 PR 中混入多条无关发布线改动（例如功能修复 + CI 治理 + 观测增强）
+- 在未完成 `main` 重基线时直接请求合并
+- 将自动生成文件漂移作为功能改动提交（见第 13 节）
 
 ---
 
@@ -208,3 +220,48 @@ git push origin v1.0.1
 - [ ] 发布 tag 为 annotated tag
 - [ ] tag 已推送到远程
 - [ ] `release/` 交付物命名符合版本号
+- [ ] Open PR 清洁度检查通过（无重复/冲突/已 superseded 未关闭 PR）
+- [ ] 工作区洁净检查通过（`git status -sb` 无 tracked 非计划改动）
+- [ ] 范围核对通过（`git diff --name-only origin/main...HEAD` 与 PR 目标一致）
+
+---
+
+## 13. 自动生成文件治理（新增）
+
+### 13.1 适用文件
+
+- `vesti-web/next-env.d.ts`（Next.js 工具链生成、可能因 `build/dev` 在引用路径上漂移）
+
+### 13.2 治理规则
+
+- 默认视为“受工具生成影响的 tracked 文件”，不作为常规功能改动提交。
+- 若仅出现以下路径切换差异，必须在功能/发布 PR 前回退：
+  - `./.next/dev/types/routes.d.ts` <-> `./.next/types/routes.d.ts`
+- 仅当升级 Next.js 或 typed-routes 机制时，允许提交该文件。
+- 允许提交时，PR 描述必须包含：
+  - 生成来源（哪个命令或版本变更触发）
+  - 影响范围（仅类型引导或包含行为变更）
+  - 回滚方式（如何恢复旧状态）
+
+### 13.3 日常执行门禁
+
+- 本地执行 `pnpm -C vesti-web build` 后，立即检查 `git status -sb`。
+- 若仅 `next-env.d.ts` 漂移，先回退再继续其它提交流程。
+- 根目录 `pnpm-lock.yaml` 可按项目策略继续保持未跟踪，不纳入本节违规项。
+
+---
+
+## 14. 2026-02-28 版本管理疏忽复盘（简版）
+
+### 14.1 观察到的疏忽
+
+- 疏忽 A：`#22/#23` 与主线已合并语义重叠后未第一时间关闭。
+- 疏忽 B：重复 PR（`#24`）造成审计噪音和决策成本增加。
+- 疏忽 C：混合 PR（功能 + CI + 可观测性）导致评审难度上升，回收成本高。
+- 疏忽 D：`next-env.d.ts` 自动漂移未纳入合并前门禁，污染工作区。
+
+### 14.2 对应改进动作（已纳入本文）
+
+- 对 A/B：执行第 3.4 节“重复 PR 24 小时关闭 + superseded 留痕”规则。
+- 对 C：执行第 3.4 节“单 PR 单主题 + DIRTY PR 拆分回收”规则。
+- 对 D：执行第 13 节“自动生成文件治理 + 提交前回退”规则。
