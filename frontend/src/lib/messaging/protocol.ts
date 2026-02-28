@@ -56,33 +56,6 @@ export interface ConversationDraft {
   is_starred: boolean;
 }
 
-export type InsightPipelineScope = "summary" | "weekly";
-export type InsightPipelineRoute = "proxy" | "modelscope";
-export type InsightPipelineStage =
-  | "initiating_pipeline"
-  | "distilling_core_logic"
-  | "curating_summary"
-  | "aggregating_weekly_digest"
-  | "persisting_result"
-  | "degraded_fallback"
-  | "completed";
-export type InsightPipelineStatus = "in_progress" | "completed" | "degraded_fallback";
-
-export interface InsightPipelineProgressPayload {
-  pipelineId: string;
-  scope: InsightPipelineScope;
-  targetId: string;
-  stage: InsightPipelineStage;
-  status: InsightPipelineStatus;
-  attempt: number;
-  startedAt: number;
-  updatedAt: number;
-  route: InsightPipelineRoute;
-  modelId: string;
-  promptVersion: string;
-  seq: number;
-}
-
 export interface ParsedMessage {
   role: "user" | "ai";
   textContent: string;
