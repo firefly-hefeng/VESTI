@@ -6,6 +6,8 @@ import {
   FileText,
   Loader2,
   Network,
+  Pause,
+  Play,
 } from "lucide-react";
 import type {
   AsyncStatus,
