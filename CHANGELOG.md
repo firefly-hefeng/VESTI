@@ -34,7 +34,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 - Added Kimi and YUANBAO parser modules with selector+anchor extraction, strict session-ID gating, parse stats logging, and v1.2 governance compatibility.
 
 ### Changed
-- Expanded capture host routing to include `kimi.moonshot.cn` and `yuanbao.tencent.com` for `GET_ACTIVE_CAPTURE_STATUS` and `FORCE_ARCHIVE_TRANSIENT`.
+- Expanded capture host routing for Kimi to include `www.kimi.com` + `kimi.com` (with transitional `kimi.moonshot.cn` compatibility) and YUANBAO `yuanbao.tencent.com` for `GET_ACTIVE_CAPTURE_STATUS` and `FORCE_ARCHIVE_TRANSIENT`.
 - Expanded platform enum/theme mapping to 8 platforms (ChatGPT/Claude/Gemini/DeepSeek/Qwen/Doubao/Kimi/YUANBAO).
 - Added sidepanel + capsule light/dark token mapping for Kimi/YUANBAO while preserving existing Threads layout structure.
 - Updated extension manifest host permissions and web-accessible matches for Kimi/YUANBAO domains.

@@ -147,7 +147,7 @@ interface ParsedNodeResult {
 export class KimiParser implements IParser {
   detect(): Platform | null {
     const host = window.location.hostname;
-    if (host.includes("kimi.moonshot.cn")) {
+    if (host === "www.kimi.com" || host === "kimi.com" || host === "kimi.moonshot.cn") {
       return "Kimi";
     }
     return null;

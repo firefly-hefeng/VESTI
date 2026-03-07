@@ -41,7 +41,9 @@ Locked policy for all phases:
 ## 3. Phase 3 Rollout (Locked)
 
 ### 3.1 Host scope (strict primary domains)
-- `https://kimi.moonshot.cn/*`
+- `https://www.kimi.com/*` (primary)
+- `https://kimi.com/*` (primary)
+- `https://kimi.moonshot.cn/*` (temporary compatibility)
 - `https://yuanbao.tencent.com/*`
 
 ### 3.2 Platform naming
@@ -147,6 +149,6 @@ Go/No-Go:
 
 ## 8. Assumptions
 
-1. Host policy remains strict to the two phase-3 primary domains above.
+1. Host policy remains strict to phase-3 primary domains (`www.kimi.com`, `kimi.com`, `yuanbao.tencent.com`) with one-cycle compatibility for `kimi.moonshot.cn`.
 2. Release target is `v1.2.0-rc.6`.
 3. This cycle does not alter public APIs (`/api/chat`, `/api/embeddings`) or schema.

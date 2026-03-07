@@ -29,7 +29,9 @@ Scope: Phase3 only (Kimi, YUANBAO) + legacy regression sanity
 - [ ] `pnpm -C frontend eval:prompts --mode=mock --strict` passes
 - [ ] Capture mode config verified (`mirror/smart/manual`)
 - [ ] Supported hosts available:
-  - [ ] `https://kimi.moonshot.cn/*`
+  - [ ] `https://www.kimi.com/*`
+  - [ ] `https://kimi.com/*`
+  - [ ] `https://kimi.moonshot.cn/*` (compatibility check)
   - [ ] `https://yuanbao.tencent.com/*`
 
 Per-case metadata must include:

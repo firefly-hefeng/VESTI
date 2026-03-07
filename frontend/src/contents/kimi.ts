@@ -7,7 +7,7 @@ import { sendRequest } from "../lib/messaging/runtime";
 import { logger } from "../lib/utils/logger";
 
 export const config: PlasmoCSConfig = {
-  matches: ["https://kimi.moonshot.cn/*"],
+  matches: ["https://www.kimi.com/*", "https://kimi.com/*", "https://kimi.moonshot.cn/*"],
   run_at: "document_idle",
 };
 

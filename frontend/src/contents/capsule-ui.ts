@@ -22,6 +22,8 @@ export const config: PlasmoCSConfig = {
     "https://chat.deepseek.com/*",
     "https://www.doubao.com/*",
     "https://chat.qwen.ai/*",
+    "https://www.kimi.com/*",
+    "https://kimi.com/*",
     "https://kimi.moonshot.cn/*",
     "https://yuanbao.tencent.com/*",
   ],
@@ -99,6 +101,8 @@ const PRIMARY_ROLLOUT_HOSTS = new Set([
   "chat.deepseek.com",
   "chat.qwen.ai",
   "www.doubao.com",
+  "www.kimi.com",
+  "kimi.com",
   "kimi.moonshot.cn",
   "yuanbao.tencent.com",
 ]);
@@ -117,6 +121,8 @@ const PLATFORM_BY_HOST: Record<string, Platform> = {
   "chat.deepseek.com": "DeepSeek",
   "chat.qwen.ai": "Qwen",
   "www.doubao.com": "Doubao",
+  "www.kimi.com": "Kimi",
+  "kimi.com": "Kimi",
   "kimi.moonshot.cn": "Kimi",
   "yuanbao.tencent.com": "YUANBAO",
 };

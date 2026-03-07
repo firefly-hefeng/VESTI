@@ -142,6 +142,8 @@ const SUPPORTED_CAPTURE_HOSTS = new Set([
   "chat.deepseek.com",
   "www.doubao.com",
   "chat.qwen.ai",
+  "www.kimi.com",
+  "kimi.com",
   "kimi.moonshot.cn",
   "yuanbao.tencent.com",
 ]);
@@ -167,7 +169,7 @@ function resolvePlatformFromUrl(url: string): Platform | undefined {
     if (host === "chat.qwen.ai") {
       return "Qwen";
     }
-    if (host === "kimi.moonshot.cn") {
+    if (host === "www.kimi.com" || host === "kimi.com" || host === "kimi.moonshot.cn") {
       return "Kimi";
     }
     if (host === "yuanbao.tencent.com") {

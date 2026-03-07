@@ -20,8 +20,10 @@ Status: In progress (rc.6)
 1. Platform scope
    - Added Kimi + YUANBAO in `Platform` unions and distribution/mapping contracts.
 2. Host routing
-   - Added strict hosts:
-     - `kimi.moonshot.cn`
+   - Added strict hosts (with Kimi transition compatibility):
+     - `www.kimi.com` (primary)
+     - `kimi.com` (primary)
+     - `kimi.moonshot.cn` (compatibility)
      - `yuanbao.tencent.com`
 3. Capture entrypoints
    - Added `frontend/src/contents/kimi.ts` and `frontend/src/contents/yuanbao.ts`.
@@ -50,7 +52,7 @@ Status: In progress (rc.6)
 
 - Source timestamp extraction remains best-effort and may be `null`.
 - Parser selectors are resilient but still sensitive to upstream DOM churn.
-- Strict host scope currently limited to the two phase-3 primary domains only.
+- Strict host scope currently follows phase-3 primary domains with one-cycle Kimi compatibility (`kimi.moonshot.cn`).
 
 ---
 
