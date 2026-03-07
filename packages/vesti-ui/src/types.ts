@@ -34,6 +34,7 @@ export interface Conversation {
   title: string;
   platform: Platform;
   snippet: string;
+  url?: string;
   tags: string[];
   topic_id: number | null;
   created_at: number;

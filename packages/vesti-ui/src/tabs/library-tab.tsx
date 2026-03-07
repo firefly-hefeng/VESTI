@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Trash2,
   X,
+  ExternalLink,
 } from "lucide-react";
 import type {
   Conversation,
@@ -1286,6 +1287,19 @@ export function LibraryTab({
                 <span>{formatDate(messageDate)}</span>
                 <span>·</span>
                 <span>{messageCount} messages</span>
+                {selectedConversation.url && (
+                  <>
+                    <span>·</span>
+                    <button
+                      onClick={() => window.open(selectedConversation.url, "_blank", "noopener,noreferrer")}
+                      className="inline-flex items-center gap-1 text-accent-primary hover:text-accent-primary/80 transition-colors"
+                      title="Open original conversation"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Open</span>
+                    </button>
+                  </>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 {activeTags.map((tag) => (
