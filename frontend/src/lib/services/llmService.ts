@@ -530,14 +530,54 @@ async function requestModelScope(
   const url = `${baseUrl}/chat/completions`;
   const payload = buildPayload(config, messages, responseFormat, streamDecision);
 
-  return fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  try {
+    return await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (fetchError) {
+    // 区分网络错误类型
+    const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+    
+    if (errorMessage.includes("CONNECTION_TIMED_OUT") || errorMessage.includes("ETIMEDOUT")) {
+      throw new LlmRequestError({
+        code: "modelscope_connection_timeout",
+        route: "modelscope",
+        status: 0,
+        requestId: undefined,
+        rawMessage: errorMessage,
+        userMessage: `Connection to ModelScope API timed out. The service may be experiencing issues.`,
+        technicalSummary: `ModelScope connection timeout: ${url}`,
+      });
+    }
+    
+    if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
+      throw new LlmRequestError({
+        code: "modelscope_network_error",
+        route: "modelscope",
+        status: 0,
+        requestId: undefined,
+        rawMessage: errorMessage,
+        userMessage: `Network error connecting to ModelScope. Check your internet connection.`,
+        technicalSummary: `ModelScope network error: ${url}`,
+      });
+    }
+    
+    // 其他未知错误
+    throw new LlmRequestError({
+      code: "modelscope_request_failed",
+      route: "modelscope",
+      status: 0,
+      requestId: undefined,
+      rawMessage: errorMessage,
+      userMessage: `ModelScope request failed: ${errorMessage}`,
+      technicalSummary: `ModelScope fetch error: ${url}`,
+      });
+  }
 }
 
 async function requestProxyService(
@@ -561,11 +601,63 @@ async function requestProxyService(
 
   const payload = buildPayload(config, messages, responseFormat, streamDecision);
 
-  return fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload),
-  });
+  try {
+    return await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  } catch (fetchError) {
+    // 区分网络错误类型，提供更详细的诊断
+    const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+    
+    if (errorMessage.includes("CONNECTION_TIMED_OUT") || errorMessage.includes("ETIMEDOUT")) {
+      throw new LlmRequestError({
+        code: "proxy_connection_timeout",
+        route: "proxy",
+        status: 0,
+        requestId: undefined,
+        rawMessage: errorMessage,
+        userMessage: `Connection to proxy server timed out. The proxy service at ${url} may be down or unreachable.`,
+        technicalSummary: `Proxy connection timeout: ${url}`,
+      });
+    }
+    
+    if (errorMessage.includes("ECONNREFUSED") || errorMessage.includes("REFUSED")) {
+      throw new LlmRequestError({
+        code: "proxy_connection_refused",
+        route: "proxy",
+        status: 0,
+        requestId: undefined,
+        rawMessage: errorMessage,
+        userMessage: `Connection refused by proxy server. Ensure the proxy service is running at ${url}.`,
+        technicalSummary: `Proxy connection refused: ${url}`,
+      });
+    }
+    
+    if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
+      throw new LlmRequestError({
+        code: "proxy_network_error",
+        route: "proxy",
+        status: 0,
+        requestId: undefined,
+        rawMessage: errorMessage,
+        userMessage: `Network error connecting to proxy. Check your internet connection and proxy URL: ${url}`,
+        technicalSummary: `Proxy network error: ${url}`,
+      });
+    }
+    
+    // 其他未知错误
+    throw new LlmRequestError({
+      code: "proxy_request_failed",
+      route: "proxy",
+      status: 0,
+      requestId: undefined,
+      rawMessage: errorMessage,
+      userMessage: `Proxy request failed: ${errorMessage}`,
+      technicalSummary: `Proxy fetch error: ${url}`,
+    });
+  }
 }
 
 async function callProvider(

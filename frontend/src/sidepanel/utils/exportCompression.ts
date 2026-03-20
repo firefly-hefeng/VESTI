@@ -5,6 +5,12 @@ import {
   CONDITIONAL_HANDOFF_SECTION_WHITELIST,
   CONDITIONAL_HANDOFF_TYPES,
 } from "~lib/prompts/export/compactComposer";
+// Summary V2 import
+import {
+  compressSummaryDataset,
+  type SummaryExportDatasetItem,
+  type CompressedSummaryExport,
+} from "./summaryCompression";
 import {
   FUTURE_MODELSCOPE_EXPORT_MODEL_CANDIDATES,
   FUTURE_MOONSHOT_DIRECT_EXPORT_MODEL_CANDIDATES,
@@ -45,7 +51,8 @@ export type ExportCompressionInvalidReasonCode =
   | "export_output_too_short"
   | "export_missing_required_headings"
   | "export_grounded_sections_insufficient"
-  | "export_artifact_signal_missing";
+  | "export_artifact_signal_missing"
+  | "incomplete_output"; // From summary compression
 
 export interface ConversationExportDatasetItem {
   conversation: Conversation;
@@ -2925,6 +2932,39 @@ export async function compressExportDataset(
   items: CompressedConversationExport[];
   notice: ConversationExportNotice;
 }> {
+  // Use Summary V2 for summary mode
+  if (mode === "summary") {
+    const summaryResult = await compressSummaryDataset(
+      dataset as SummaryExportDatasetItem[]
+    );
+    // Map Summary results to CompressedConversationExport format
+    const items: CompressedConversationExport[] = summaryResult.items.map(
+      (summaryItem): CompressedConversationExport => ({
+        conversation: summaryItem.conversation,
+        messages: summaryItem.messages,
+        body: summaryItem.body,
+        mode: "summary",
+        source: summaryItem.source,
+        usedFallbackPrompt: summaryItem.usedFallbackPrompt,
+        fallbackReason: summaryItem.fallbackReason,
+        diagnostic: summaryItem.diagnostic,
+        modelId: summaryItem.modelId,
+        exportPromptProfile: summaryItem.exportPromptProfile,
+        primaryInvalidReason: summaryItem.primaryInvalidReason as ExportCompressionInvalidReasonCode | undefined,
+        fallbackInvalidReason: summaryItem.fallbackInvalidReason as ExportCompressionInvalidReasonCode | undefined,
+        llmAttemptMetrics: summaryItem.llmAttemptMetrics as ExportCompressionLlmAttemptMetrics | undefined,
+        deliveredArtifactMetrics: summaryItem.deliveredMetrics as ExportCompressionDeliveredArtifactMetrics | undefined,
+        integrityWarnings: summaryItem.integrityWarnings,
+        softCompressionWarning: summaryItem.qualityWarning,
+      })
+    );
+    return {
+      items,
+      notice: summaryResult.notice,
+    };
+  }
+
+  // Original compact mode logic (unchanged)
   const route = resolveExportCompressionRoute();
   const adapter = ADAPTERS[route];
   const items: CompressedConversationExport[] = [];
