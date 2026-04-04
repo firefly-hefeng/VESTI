@@ -1,7 +1,7 @@
 <div align="center">
 
   <h1>心迹 Vesti</h1>
-  <p>本地优先的 AI 对话记忆与知识管理中台 | Local-First AI Conversation Memory & Knowledge Hub</p>
+  <p>本地优先的 AI 对话记忆与知识管理平台 | Local-First AI Conversation Memory & Knowledge Hub</p>
 
   <h3>📷 Vesti 界面概览与核心功能演示</h3>
 
