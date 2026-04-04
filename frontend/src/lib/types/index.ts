@@ -58,6 +58,13 @@ export interface Conversation {
   topic_id: number | null;
   is_starred: boolean;
   has_note?: boolean;
+  // Local terminal extension fields (from VESTI-CLI)
+  _source?: "browser" | "local_terminal";
+  _cli_id?: string;
+  _cli_platform?: string;
+  _project_path?: string;
+  _model?: string;
+  _tool_call_count?: number;
 }
 
 export interface SearchConversationMatchesQuery {
