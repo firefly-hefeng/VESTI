@@ -522,13 +522,53 @@ export async function listConversations(
     );
   }
 
-  return results
+  let conversations = results
     .sort(
       (a, b) =>
         getConversationOriginAt(toConversation(b)) -
         getConversationOriginAt(toConversation(a))
     )
     .map(toConversation);
+
+  // Merge local terminal conversations (from VESTI-CLI API, if available)
+  try {
+    const { fetchLocalConversations } = await import("../providers/localTerminal");
+    const localConversations = await fetchLocalConversations({
+      limit: 500,
+      platform: filters?.platform,
+    });
+
+    if (localConversations.length > 0) {
+      let filtered = localConversations as unknown as Conversation[];
+
+      if (filters?.search) {
+        const q = filters.search.toLowerCase();
+        filtered = filtered.filter(
+          (c) =>
+            c.title.toLowerCase().includes(q) ||
+            c.snippet.toLowerCase().includes(q)
+        );
+      }
+
+      if (filters?.dateRange) {
+        filtered = filtered.filter(
+          (c) => {
+            const originAt = getConversationOriginAt(c);
+            return originAt >= filters.dateRange!.start && originAt <= filters.dateRange!.end;
+          }
+        );
+      }
+
+      // Merge and re-sort by date
+      conversations = [...conversations, ...filtered].sort(
+        (a, b) => getConversationOriginAt(b) - getConversationOriginAt(a)
+      );
+    }
+  } catch {
+    // Local terminal API not available — silently skip
+  }
+
+  return conversations;
 }
 
 export async function getConversationById(id: number): Promise<Conversation | null> {
@@ -818,13 +858,29 @@ export async function listConversationsByRange(
   rangeEnd: number
 ): Promise<Conversation[]> {
   const records = await db.conversations.toArray();
-  return records
+  let conversations = records
     .map(toConversation)
     .filter((conversation) => {
       const originAt = getConversationOriginAt(conversation);
       return originAt >= rangeStart && originAt <= rangeEnd;
-    })
-    .sort((a, b) => getConversationOriginAt(b) - getConversationOriginAt(a));
+    });
+
+  // Merge local terminal conversations in range
+  try {
+    const { fetchLocalConversations } = await import("../providers/localTerminal");
+    const localConversations = await fetchLocalConversations({ limit: 500 });
+    const localInRange = (localConversations as unknown as Conversation[]).filter((c) => {
+      const originAt = getConversationOriginAt(c);
+      return originAt >= rangeStart && originAt <= rangeEnd;
+    });
+    if (localInRange.length > 0) {
+      conversations = [...conversations, ...localInRange];
+    }
+  } catch {
+    // silently skip
+  }
+
+  return conversations.sort((a, b) => getConversationOriginAt(b) - getConversationOriginAt(a));
 }
 
 export async function listMessages(
