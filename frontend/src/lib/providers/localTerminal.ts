@@ -32,13 +32,17 @@ export async function isLocalTerminalAvailable(): Promise<boolean> {
   }
 
   try {
-    const res = await fetch(`${getApiBase()}/api/vesti/ping`, {
+    const url = `${getApiBase()}/api/vesti/ping`;
+    console.log("[vesti] Checking local terminal:", url);
+    const res = await fetch(url, {
       signal: AbortSignal.timeout(PING_TIMEOUT_MS),
     });
     const available = res.ok;
+    console.log("[vesti] Local terminal available:", available);
     cachedAvailability = { available, checkedAt: Date.now() };
     return available;
-  } catch {
+  } catch (err) {
+    console.warn("[vesti] Local terminal ping failed:", (err as Error)?.message ?? err);
     cachedAvailability = { available: false, checkedAt: Date.now() };
     return false;
   }

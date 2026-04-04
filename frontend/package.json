@@ -51,6 +51,7 @@
     "version": "1.2.0",
     "version_name": "1.2.0-rc.8",
     "host_permissions": [
+      "http://localhost/*",
       "https://vesti-proxy.vercel.app/*",
       "https://dashscope.aliyuncs.com/*",
       "https://api-inference.modelscope.cn/*",

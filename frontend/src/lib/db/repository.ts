@@ -46,6 +46,7 @@ import {
   compareSearchSurfacePriority,
 } from "../utils/messageSearchProjection";
 import { normalizeSearchQuery, shouldRunFullTextSearch } from "../utils/searchReadiness";
+import { fetchLocalConversations } from "../providers/localTerminal";
 import { db } from "./schema";
 import { enforceStorageWriteGuard, getStorageUsageSnapshot } from "./storageLimits";
 import type {
@@ -532,7 +533,6 @@ export async function listConversations(
 
   // Merge local terminal conversations (from VESTI-CLI API, if available)
   try {
-    const { fetchLocalConversations } = await import("../providers/localTerminal");
     const localConversations = await fetchLocalConversations({
       limit: 500,
       platform: filters?.platform,
@@ -564,8 +564,9 @@ export async function listConversations(
         (a, b) => getConversationOriginAt(b) - getConversationOriginAt(a)
       );
     }
-  } catch {
-    // Local terminal API not available — silently skip
+  } catch (localError) {
+    // Local terminal API not available — log for debugging
+    console.warn("[vesti] Local terminal fetch failed:", (localError as Error)?.message ?? localError);
   }
 
   return conversations;
@@ -867,7 +868,6 @@ export async function listConversationsByRange(
 
   // Merge local terminal conversations in range
   try {
-    const { fetchLocalConversations } = await import("../providers/localTerminal");
     const localConversations = await fetchLocalConversations({ limit: 500 });
     const localInRange = (localConversations as unknown as Conversation[]).filter((c) => {
       const originAt = getConversationOriginAt(c);
